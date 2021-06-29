@@ -10,20 +10,31 @@ import (
 )
 
 type Queue struct {
-	chmap *sync.Map
+	chmap map[string][]net.IP
+	lock  sync.RWMutex
 }
 
 func NewQueue() *Queue {
-	return &Queue{}
+	return &Queue{chmap: make(map[string][]net.IP)}
+}
+
+func (q *Queue) Subscribe(channel string, ip net.IP) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	if ips, ok := q.chmap[channel]; ok {
+		q.chmap[channel] = append(ips, ip)
+	} else {
+		q.chmap[channel] = []net.IP{ip}
+	}
 }
 
 func (q *Queue) Publish(req *pb.Request) error {
-	if q.chmap == nil {
-		q.chmap = &sync.Map{}
-	}
+	q.lock.RLock()
+	defer q.lock.RUnlock()
 
-	if ips, ok := q.chmap.Load(req.Channel); ok {
-		for _, ip := range ips.([]net.IP) {
+	if ips, ok := q.chmap[req.Channel]; ok {
+		for _, ip := range ips {
 			if err := q.publish(ip, req.Message); err != nil {
 				// TODO 错误处理
 				panic(err)
