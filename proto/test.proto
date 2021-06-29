@@ -1,0 +1,15 @@
+syntax = "proto3";  //指定版本，必须要写（proto3、proto2）
+package proto;
+
+option go_package="./";
+enum FOO
+{
+  X = 0;
+};
+
+//message是固定的。UserInfo是类名，可以随意指定，符合规范即可
+message UserInfo{
+  string message = 1;   //消息
+  int32 length = 2;    //消息大小
+  int32 cnt = 3;      //消息计数
+}
