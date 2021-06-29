@@ -40,7 +40,6 @@ func (q *Queue) pushToIp(ip net.IP, message *pb.Message) error {
 	var conn net.Conn
 	var err error
 
-	//连接服务器
 	if conn, err = net.Dial("tcp", ip.String()); err != nil {
 		return err
 	}
