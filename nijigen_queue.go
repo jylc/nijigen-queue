@@ -10,22 +10,22 @@ import (
 )
 
 type Queue struct {
-	chmap map[string][]net.IP
+	chmap map[string][]net.Conn
 	lock  sync.RWMutex
 }
 
 func NewQueue() *Queue {
-	return &Queue{chmap: make(map[string][]net.IP)}
+	return &Queue{chmap: make(map[string][]net.Conn)}
 }
 
-func (q *Queue) Subscribe(channel string, ip net.IP) {
+func (q *Queue) Subscribe(channel string, conn net.Conn) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	if ips, ok := q.chmap[channel]; ok {
-		q.chmap[channel] = append(ips, ip)
+	if conns, ok := q.chmap[channel]; ok {
+		q.chmap[channel] = append(conns, conn)
 	} else {
-		q.chmap[channel] = []net.IP{ip}
+		q.chmap[channel] = []net.Conn{conn}
 	}
 }
 
@@ -33,9 +33,9 @@ func (q *Queue) Publish(req *pb.Request) error {
 	q.lock.RLock()
 	defer q.lock.RUnlock()
 
-	if ips, ok := q.chmap[req.Channel]; ok {
-		for _, ip := range ips {
-			if err := q.publish(ip, req.Message); err != nil {
+	if conns, ok := q.chmap[req.Channel]; ok {
+		for _, conn := range conns {
+			if err := q.publish(conn, req.Message); err != nil {
 				// TODO 错误处理
 				panic(err)
 			}
@@ -48,15 +48,7 @@ func (q *Queue) Publish(req *pb.Request) error {
 	return nil
 }
 
-func (q *Queue) publish(ip net.IP, message *pb.Message) error {
-	var conn net.Conn
-	var err error
-
-	if conn, err = net.Dial("tcp", ip.String()); err != nil {
-		return err
-	}
-	defer conn.Close()
-
+func (q *Queue) publish(conn net.Conn, message *pb.Message) error {
 	msg, err := proto.Marshal(message)
 	if err != nil {
 		return err
