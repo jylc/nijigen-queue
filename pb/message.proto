@@ -1,0 +1,10 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "../pb";
+
+message Message{
+  string route = 1;
+  string message = 2;
+  int32 length = 3;
+}
