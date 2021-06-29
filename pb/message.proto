@@ -3,17 +3,12 @@ package proto;
 
 option go_package = "../pb";
 
-message Route {
-  string route = 1;
-  string channel = 2;
-}
-
 message Message {
   string message = 1;
   int32 length = 2;
 }
 
 message Request{
-  Route route = 1;
+  string channel = 1;
   Message message = 2;
 }

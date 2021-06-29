@@ -21,7 +21,7 @@ func (q *Queue) PushMessage(req *pb.Request) error {
 		q.chmap = make(map[string][]net.IP)
 	}
 
-	if ips, ok := q.chmap[req.Route.Channel]; ok {
+	if ips, ok := q.chmap[req.Channel]; ok {
 		for _, ip := range ips {
 			if err := q.pushToIp(ip, req.Message); err != nil {
 				// TODO 错误处理
