@@ -3,13 +3,14 @@ package main
 import (
 	"errors"
 	"net"
+	"sync"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/jylc/nijigen-queue/pb"
 )
 
 type Queue struct {
-	chmap map[string][]net.IP
+	chmap *sync.Map
 }
 
 func NewQueue() *Queue {
@@ -18,11 +19,11 @@ func NewQueue() *Queue {
 
 func (q *Queue) Publish(req *pb.Request) error {
 	if q.chmap == nil {
-		q.chmap = make(map[string][]net.IP)
+		q.chmap = &sync.Map{}
 	}
 
-	if ips, ok := q.chmap[req.Channel]; ok {
-		for _, ip := range ips {
+	if ips, ok := q.chmap.Load(req.Channel); ok {
+		for _, ip := range ips.([]net.IP) {
 			if err := q.publish(ip, req.Message); err != nil {
 				// TODO 错误处理
 				panic(err)
