@@ -16,14 +16,14 @@ func NewQueue() *Queue {
 	return &Queue{}
 }
 
-func (q *Queue) PushMessage(req *pb.Request) error {
+func (q *Queue) Publish(req *pb.Request) error {
 	if q.chmap == nil {
 		q.chmap = make(map[string][]net.IP)
 	}
 
 	if ips, ok := q.chmap[req.Channel]; ok {
 		for _, ip := range ips {
-			if err := q.pushToIp(ip, req.Message); err != nil {
+			if err := q.publish(ip, req.Message); err != nil {
 				// TODO 错误处理
 				panic(err)
 			}
@@ -36,7 +36,7 @@ func (q *Queue) PushMessage(req *pb.Request) error {
 	return nil
 }
 
-func (q *Queue) pushToIp(ip net.IP, message *pb.Message) error {
+func (q *Queue) publish(ip net.IP, message *pb.Message) error {
 	var conn net.Conn
 	var err error
 
