@@ -1,4 +1,4 @@
-package main
+package nijigen_queue
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/jylc/nijigen-queue/pb"
+	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
 type Queue struct {
