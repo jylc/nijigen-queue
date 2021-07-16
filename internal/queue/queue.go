@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,7 +34,7 @@ func (q *Queue) Handle(msg *pb.Message, addr net.Addr) ([]byte, error) {
 		q.Subscribe(msg.Channel, addr)
 		return []byte("OK"), nil
 	case OperationPub:
-		if err := q.Publish(msg); err != nil {
+		if err := q.Publish(msg, addr); err != nil {
 			return nil, err
 		}
 
@@ -47,6 +48,8 @@ func (q *Queue) Subscribe(channel string, addr net.Addr) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	logrus.Debugf("sub: [%s] subscribe [%s]", addr.String(), channel)
+
 	if addrs, ok := q.chmap[channel]; ok {
 		q.chmap[channel] = append(addrs, addr)
 	} else {
@@ -54,9 +57,11 @@ func (q *Queue) Subscribe(channel string, addr net.Addr) {
 	}
 }
 
-func (q *Queue) Publish(msg *pb.Message) error {
+func (q *Queue) Publish(msg *pb.Message, addr net.Addr) error {
 	q.lock.RLock()
 	defer q.lock.RUnlock()
+
+	logrus.Debugf("pub: [%s] publish channel [%s] with content [%s]", addr.String(), msg.Channel, msg.Content)
 
 	if addrs, ok := q.chmap[msg.Channel]; ok {
 		for _, addr := range addrs {

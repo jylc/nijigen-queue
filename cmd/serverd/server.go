@@ -22,25 +22,29 @@ func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
 }
 
 func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
-	onError := func(err []byte) {
-		out = err
+	onError := func(err error) {
+		logrus.Error(err)
+		out = []byte(err.Error())
 		action = gnet.Close
 	}
 
-	if c.Context() != nil {
-		onError([]byte("err"))
-		return
+	ctx := c.Context()
+	if ctx != nil {
+		if err, ok := ctx.(error); ok {
+			onError(err)
+			return
+		}
 	}
 
 	// handle the request
 	msg := &pb.Message{}
 	if err := proto.NewBuffer(frame).Unmarshal(msg); err != nil {
-		onError([]byte(err.Error()))
+		onError(err)
 		return
 	}
 
 	if res, err := s.q.Handle(msg, c.RemoteAddr()); err != nil {
-		onError([]byte(err.Error()))
+		onError(err)
 		return
 	} else {
 		out = res
