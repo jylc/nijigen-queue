@@ -3,8 +3,7 @@ package proto;
 
 option go_package = "../pb";
 
-message Message {
+message Publish {
   string channel = 1;
-  int32 operation = 2; // 1. 订阅 2. 发布
-  string content = 3;
+  string content = 2;
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/jylc/nijigen-queue/internal/queue"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
@@ -10,6 +11,8 @@ import (
 
 type Server struct {
 	*gnet.EventServer
+
+	q *queue.Queue
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
@@ -36,6 +39,12 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 		return
 	}
 
-	// TODO switch channel to assign handler
-	return
+	if res, err := s.q.Handle(msg, c.RemoteAddr()); err != nil {
+		onError([]byte(err.Error()))
+		return
+	} else {
+		out = res
+		action = gnet.None
+		return
+	}
 }
