@@ -12,7 +12,6 @@ func run(conf *Config) error {
 	}
 
 	// TODO listening tcp on conf.port
-
 	return nil
 }
 
