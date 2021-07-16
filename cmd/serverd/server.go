@@ -1,10 +1,9 @@
 package main
 
 import (
-	"log"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/panjf2000/gnet"
+	"github.com/sirupsen/logrus"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
@@ -14,7 +13,7 @@ type Server struct {
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
-	log.Printf("Nijigen Queue is listening on %s (multi-cores: %t, loops: %d)\n",
+	logrus.Infof("Nijigen Queue is listening on %s (multi-cores: %t, loops: %d)",
 		srv.Addr.String(), srv.Multicore, srv.NumEventLoop)
 	return
 }
