@@ -3,12 +3,12 @@ package proto;
 
 option go_package = "../pb";
 
-message Message {
-  string message = 1;
-  int32 length = 2;
+message Request{
+  uint32 length = 1;
+  Message message = 2;
 }
 
-message Request{
+message Message {
   string channel = 1;
-  Message message = 2;
+  int32 operation = 2; // 1. 订阅 2. 发布
 }
