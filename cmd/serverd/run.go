@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 
+	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
+
+	"github.com/jylc/nijigen-queue/internal/decoder"
 )
 
 func run(conf *Config) error {
@@ -11,7 +14,12 @@ func run(conf *Config) error {
 		return err
 	}
 
-	// TODO listening tcp on conf.port
+	logrus.Fatal(gnet.Serve(
+		&Server{},
+		fmt.Sprintf("tcp://0.0.0.0:%s", conf.port),
+		gnet.WithMulticore(true),
+		gnet.WithCodec(&decoder.MessageDecoder{}),
+	))
 	return nil
 }
 
