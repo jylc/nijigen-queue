@@ -35,9 +35,14 @@ func (m *MessageDecoder) Decode(c gnet.Conn) ([]byte, error) {
 		return nil, nil
 	}
 
-	// 处理请求 以及 数据流中剩下的部分
-	m.buf = dataBuf[l-1:]
-	return dataBuf[:l], nil
+	if l+lengthByte == len(dataBuf) {
+		// 没有剩余
+		return dataBuf[lengthByte:], nil
+	}
+
+	// 有剩余
+	m.buf = dataBuf[l+lengthByte:]
+	return dataBuf[lengthByte : lengthByte+l], nil
 }
 
 func lengthOfMessage(buf []byte) int {
@@ -46,5 +51,5 @@ func lengthOfMessage(buf []byte) int {
 	}
 
 	lenBuf := buf[:lengthByte]
-	return int(uint32(lenBuf[0]) | uint32(lenBuf[1])<<8 | uint32(lenBuf[2])<<16 | uint32(lenBuf[3])<<24)
+	return int(uint32(lenBuf[3]) | uint32(lenBuf[2])<<8 | uint32(lenBuf[1])<<16 | uint32(lenBuf[0])<<24)
 }
