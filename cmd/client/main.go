@@ -2,9 +2,11 @@ package main
 
 import (
 	"net"
+	"sync"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
 	"github.com/jylc/nijigen-queue/internal/queue"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,4 +35,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func(conn net.Conn) {
+		readBuf := make([]byte, 256)
+		length, err := conn.Read(readBuf)
+		if err != nil {
+			panic(err)
+		}
+		if length != 0 {
+			logrus.Info(string(readBuf))
+		} else {
+			logrus.Info("cannot receive message from server\n")
+		}
+		wg.Done()
+	}(conn)
+	wg.Wait()
 }

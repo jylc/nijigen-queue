@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
+	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,21 +21,21 @@ var (
 )
 
 type Queue struct {
-	chmap map[string][]net.Addr
+	chmap map[string][]gnet.Conn
 	lock  sync.RWMutex
 }
 
 func NewQueue() *Queue {
-	return &Queue{chmap: make(map[string][]net.Addr)}
+	return &Queue{chmap: make(map[string][]gnet.Conn)}
 }
 
-func (q *Queue) Handle(msg *pb.Message, addr net.Addr) ([]byte, error) {
+func (q *Queue) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
 	switch msg.Operation {
 	case OperationSub:
-		q.Subscribe(msg.Channel, addr)
+		q.Subscribe(msg.Channel, conn)
 		return []byte("OK"), nil
 	case OperationPub:
-		if err := q.Publish(msg, addr); err != nil {
+		if err := q.Publish(msg, conn); err != nil {
 			return nil, err
 		}
 
@@ -44,28 +45,28 @@ func (q *Queue) Handle(msg *pb.Message, addr net.Addr) ([]byte, error) {
 	}
 }
 
-func (q *Queue) Subscribe(channel string, addr net.Addr) {
+func (q *Queue) Subscribe(channel string, conn gnet.Conn) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	logrus.Debugf("sub: [%s] subscribe [%s]", addr.String(), channel)
+	logrus.Debugf("sub: [%s] subscribe [%s]", conn.RemoteAddr().String(), channel)
 
 	if addrs, ok := q.chmap[channel]; ok {
-		q.chmap[channel] = append(addrs, addr)
+		q.chmap[channel] = append(addrs, conn)
 	} else {
-		q.chmap[channel] = []net.Addr{addr}
+		q.chmap[channel] = []gnet.Conn{conn}
 	}
 }
 
-func (q *Queue) Publish(msg *pb.Message, addr net.Addr) error {
+func (q *Queue) Publish(msg *pb.Message, conn gnet.Conn) error {
 	q.lock.RLock()
 	defer q.lock.RUnlock()
 
-	logrus.Debugf("pub: [%s] publish channel [%s] with content [%s]", addr.String(), msg.Channel, msg.Content)
+	logrus.Debugf("pub: [%s] publish channel [%s] with content [%s]", conn.RemoteAddr().String(), msg.Channel, msg.Content)
 
-	if addrs, ok := q.chmap[msg.Channel]; ok {
-		for _, addr := range addrs {
-			if err := q.publish(addr, &pb.Publish{
+	if conns, ok := q.chmap[msg.Channel]; ok {
+		for _, conn := range conns {
+			if err := q.publish(conn, &pb.Publish{
 				Channel: msg.Channel,
 				Content: msg.Content,
 			}); err != nil {
@@ -81,17 +82,17 @@ func (q *Queue) Publish(msg *pb.Message, addr net.Addr) error {
 	return nil
 }
 
-func (q *Queue) publish(addr net.Addr, pub *pb.Publish) error {
+func (q *Queue) publish(conn gnet.Conn, pub *pb.Publish) error {
 	msg, err := proto.Marshal(pub)
 	if err != nil {
 		return err
 	}
-
-	conn, err := net.Dial(addr.Network(), addr.String())
+	addr := conn.RemoteAddr()
+	newConn, err := net.Dial(addr.Network(), addr.String())
 	if err != nil {
 		return err
 	}
-	if _, err = conn.Write(msg); err != nil {
+	if _, err = newConn.Write(msg); err != nil {
 		return err
 	}
 
