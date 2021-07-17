@@ -38,6 +38,7 @@ func main() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func(conn net.Conn) {
+		defer conn.Close()
 		readBuf := make([]byte, 256)
 		length, err := conn.Read(readBuf)
 		if err != nil {

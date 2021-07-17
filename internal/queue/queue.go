@@ -21,12 +21,13 @@ var (
 )
 
 type Queue struct {
-	chmap map[string][]gnet.Conn
-	lock  sync.RWMutex
+	chmap         map[string][]gnet.Conn
+	surplusMsgMap map[string][]*pb.Message
+	lock          sync.RWMutex
 }
 
 func NewQueue() *Queue {
-	return &Queue{chmap: make(map[string][]gnet.Conn)}
+	return &Queue{chmap: make(map[string][]gnet.Conn), surplusMsgMap: make(map[string][]*pb.Message)}
 }
 
 func (q *Queue) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
@@ -55,6 +56,7 @@ func (q *Queue) Subscribe(channel string, conn gnet.Conn) {
 		q.chmap[channel] = append(addrs, conn)
 	} else {
 		q.chmap[channel] = []gnet.Conn{conn}
+		q.publishSurplusMsg(channel, conn)
 	}
 }
 
@@ -75,7 +77,8 @@ func (q *Queue) Publish(msg *pb.Message, conn gnet.Conn) error {
 			}
 		}
 	} else {
-		// TODO 保存下来，等有订阅者的时候再 push
+		//按照channel存放msg
+		q.surplusMsgMap[msg.Channel] = append(q.surplusMsgMap[msg.Channel], msg)
 		return errors.New("no subscriber")
 	}
 
@@ -97,4 +100,19 @@ func (q *Queue) publish(conn gnet.Conn, pub *pb.Publish) error {
 	}
 
 	return nil
+}
+
+func (q *Queue) publishSurplusMsg(channel string, conn gnet.Conn) {
+	//新建订阅后若存在之前的消息立即push
+	if surplusMsg, ok := q.surplusMsgMap[channel]; ok {
+		for _, msg := range surplusMsg {
+			if err := q.publish(conn, &pb.Publish{
+				Channel: channel,
+				Content: msg.Content,
+			}); err != nil {
+				panic(err)
+			}
+		}
+		delete(q.surplusMsgMap, channel)
+	}
 }
