@@ -2,11 +2,11 @@ package queue
 
 import (
 	"errors"
-	"net"
 	"sync"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
 	"github.com/panjf2000/gnet"
+	"github.com/panjf2000/gnet/pool/goroutine"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
@@ -24,10 +24,16 @@ type Queue struct {
 	chmap         map[string][]gnet.Conn
 	surplusMsgMap map[string][]*pb.Message
 	lock          sync.RWMutex
+
+	pool *goroutine.Pool
 }
 
 func NewQueue() *Queue {
-	return &Queue{chmap: make(map[string][]gnet.Conn), surplusMsgMap: make(map[string][]*pb.Message)}
+	return &Queue{
+		chmap:         make(map[string][]gnet.Conn),
+		surplusMsgMap: make(map[string][]*pb.Message),
+		pool:          goroutine.Default(),
+	}
 }
 
 func (q *Queue) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
@@ -39,7 +45,6 @@ func (q *Queue) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
 		if err := q.Publish(msg, conn); err != nil {
 			return nil, err
 		}
-
 		return []byte("OK"), nil
 	default:
 		return nil, ErrOp
@@ -90,12 +95,13 @@ func (q *Queue) publish(conn gnet.Conn, pub *pb.Publish) error {
 	if err != nil {
 		return err
 	}
-	addr := conn.RemoteAddr()
-	newConn, err := net.Dial(addr.Network(), addr.String())
+
+	err = q.pool.Submit(func() {
+		if err = conn.AsyncWrite(msg); err != nil {
+			logrus.Errorf("channel [%s] write message [%s] to [%s] error: %s", pub.Channel, pub.Content, conn.RemoteAddr(), err)
+		}
+	})
 	if err != nil {
-		return err
-	}
-	if _, err = newConn.Write(msg); err != nil {
 		return err
 	}
 
