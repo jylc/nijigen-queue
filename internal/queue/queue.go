@@ -123,5 +123,8 @@ func (q *Queue) publishSurplusMsg(channel string, conn gnet.Conn) {
 			}
 		}
 		delete(q.surplusMsgMap, channel)
+		if len(q.surplusMsgMap) == 0 { // 避免 map 的标记删除无限增加内存
+			q.surplusMsgMap = make(map[string][]*pb.Message)
+		}
 	}
 }
