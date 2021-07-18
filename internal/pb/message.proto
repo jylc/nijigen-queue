@@ -1,0 +1,10 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "../pb";
+
+message Message {
+  string channel = 1;
+  int32 operation = 2; // 1. 订阅 2. 发布
+  string content = 3;
+}
