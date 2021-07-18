@@ -37,6 +37,7 @@ func (m *MessageDecoder) Decode(c gnet.Conn) ([]byte, error) {
 
 	if l+lengthByte == len(dataBuf) {
 		// 没有剩余
+		m.buf = m.buf[0:0]
 		return dataBuf[lengthByte:], nil
 	}
 
