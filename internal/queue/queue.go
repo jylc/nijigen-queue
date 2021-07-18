@@ -109,6 +109,7 @@ func (q *Queue) publish(conn gnet.Conn, pub *pb.Publish) error {
 }
 
 func (q *Queue) publishSurplusMsg(channel string, conn gnet.Conn) {
+	// TODO 解决线程安全问题
 	//新建订阅后若存在之前的消息立即push
 	if surplusMsg, ok := q.surplusMsgMap[channel]; ok {
 		for _, msg := range surplusMsg {
@@ -116,6 +117,7 @@ func (q *Queue) publishSurplusMsg(channel string, conn gnet.Conn) {
 				Channel: channel,
 				Content: msg.Content,
 			}); err != nil {
+				// TODO 错误处理
 				panic(err)
 			}
 		}
