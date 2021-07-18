@@ -4,9 +4,10 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/jylc/nijigen-queue/internal/goroutine"
 	"github.com/jylc/nijigen-queue/internal/pb"
+	"github.com/panjf2000/ants/v2"
 	"github.com/panjf2000/gnet"
-	"github.com/panjf2000/gnet/pool/goroutine"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
@@ -25,7 +26,7 @@ type Queue struct {
 	surplusMsgMap map[string][]*pb.Message
 	lock          sync.RWMutex
 
-	pool *goroutine.Pool
+	pool *ants.Pool
 }
 
 func NewQueue() *Queue {

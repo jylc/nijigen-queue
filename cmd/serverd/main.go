@@ -10,7 +10,6 @@ import (
 
 func main() {
 	fmt.Println(logo())
-
 	logrus.SetFormatter(&logrus.TextFormatter{
 		TimestampFormat: RFC3339NanoFixed,
 		FullTimestamp:   true,
