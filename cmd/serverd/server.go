@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/jylc/nijigen-queue/internal/queue"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
+
+	"github.com/jylc/nijigen-queue/internal/queue"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
@@ -55,16 +58,18 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 }
 
 func (s *Server) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
-	logrus.Infof("server connection is opened")
+	logrus.Infof("client [%s] connected", c.RemoteAddr())
 	return
 }
 
 func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
-	logrus.Infof("server connection is closed")
-	err = c.Close()
+	if errors.Is(err, io.EOF) {
+		logrus.Infof("client [%s] disconnected", c.RemoteAddr())
+		return
+	}
+
 	if err != nil {
-		logrus.Infof("close server connection failed")
-		action = gnet.Close
+		logrus.Infof("client [%s] disconnected and error occurd on close: %v", c.RemoteAddr(), err)
 	}
 	return
 }
