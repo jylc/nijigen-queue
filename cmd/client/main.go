@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"net"
 	"sync"
 	"time"
@@ -29,10 +30,7 @@ func main() {
 
 	l := uint32(len(data))
 	buf := make([]byte, 4)
-	buf[3] = uint8(l)
-	buf[2] = uint8(l >> 8)
-	buf[1] = uint8(l >> 16)
-	buf[0] = uint8(l >> 24)
+	binary.BigEndian.PutUint32(buf, l)
 	_, err = conn.Write(append(buf, data...))
 	if err != nil {
 		panic(err)

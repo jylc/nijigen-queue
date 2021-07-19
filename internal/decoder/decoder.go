@@ -1,6 +1,8 @@
 package decoder
 
 import (
+	"encoding/binary"
+
 	"github.com/panjf2000/gnet"
 )
 
@@ -52,5 +54,5 @@ func lengthOfMessage(buf []byte) int {
 	}
 
 	lenBuf := buf[:lengthByte]
-	return int(uint32(lenBuf[3]) | uint32(lenBuf[2])<<8 | uint32(lenBuf[1])<<16 | uint32(lenBuf[0])<<24)
+	return int(binary.BigEndian.Uint32(lenBuf))
 }

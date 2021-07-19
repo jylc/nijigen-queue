@@ -57,7 +57,7 @@ func (q *Queue) Subscribe(channel string, conn gnet.Conn) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	logrus.Debugf("sub: [%s] subscribe [%s]", conn.RemoteAddr().String(), channel)
+	logrus.Infof("sub: [%s] subscribe [%s]", conn.RemoteAddr().String(), channel)
 
 	if addrs, ok := q.chmap[channel]; ok {
 		q.chmap[channel] = append(addrs, conn)
@@ -70,7 +70,7 @@ func (q *Queue) Publish(msg *pb.Message, conn gnet.Conn) error {
 	q.lock.RLock()
 	defer q.lock.RUnlock()
 
-	logrus.Debugf("pub: [%s] publish channel [%s] with content [%s]", conn.RemoteAddr().String(), msg.Channel, msg.Content)
+	logrus.Infof("pub: [%s] publish channel [%s] with content [%s]", conn.RemoteAddr().String(), msg.Channel, msg.Content)
 
 	if conns, ok := q.chmap[msg.Channel]; ok {
 		for _, conn := range conns {
