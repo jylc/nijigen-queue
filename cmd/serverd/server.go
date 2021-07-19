@@ -9,14 +9,14 @@ import (
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
-	"github.com/jylc/nijigen-queue/internal/queue"
+	"github.com/jylc/nijigen-queue/internal/core"
 
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
 type Server struct {
 	*gnet.EventServer
-	q *queue.Queue
+	nq *core.NQ
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
@@ -47,7 +47,7 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 		return
 	}
 
-	if res, err := s.q.Handle(msg, c); err != nil {
+	if res, err := s.nq.Handle(msg, c); err != nil {
 		onError(err)
 		return
 	} else {

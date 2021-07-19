@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/jylc/nijigen-queue/internal/queue"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
+
+	"github.com/jylc/nijigen-queue/internal/core"
 
 	"github.com/jylc/nijigen-queue/internal/decoder"
 )
@@ -16,7 +17,7 @@ func run(conf *Config) error {
 	}
 
 	logrus.Fatal(gnet.Serve(
-		&Server{q: queue.NewQueue()},
+		&Server{nq: core.NewNQ()},
 		fmt.Sprintf("tcp://0.0.0.0:%s", conf.port),
 		gnet.WithMulticore(true),
 		gnet.WithCodec(&decoder.MessageDecoder{}),

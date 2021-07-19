@@ -4,13 +4,12 @@ import (
 	"encoding/binary"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/jylc/nijigen-queue/internal/core"
 	"github.com/jylc/nijigen-queue/internal/pb"
-	"github.com/jylc/nijigen-queue/internal/queue"
 )
 
 func main() {
@@ -21,7 +20,7 @@ func main() {
 
 	data, err := proto.Marshal(&pb.Message{
 		Channel:   "key1",
-		Operation: queue.OperationSub,
+		Operation: core.OperationPub,
 		Content:   "11",
 	})
 	if err != nil {
@@ -49,7 +48,6 @@ func main() {
 			logrus.Info("cannot receive message from server\n")
 		}
 
-		time.Sleep(2 * time.Second)
 		conn.Close()
 		wg.Done()
 	}(conn)
