@@ -36,15 +36,15 @@ func (nq *NQ) fixTopic(topic string) {
 }
 
 func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
-	nq.fixTopic(msg.Channel) // TODO 消息增加 topic 字段
+	nq.fixTopic(msg.Topic) // TODO 消息增加 topic 字段
 	// TODO 在这中间可能出现删除的情况
 	nq.lock.RLock()
 	defer nq.lock.RUnlock()
 
-	topic := nq.topicMap[msg.Channel]
+	topic := nq.topicMap[msg.Topic]
 	switch msg.Operation {
 	case OperationSub:
-		topic.Subscribe(msg.Channel, conn)
+		topic.Subscribe(msg.Topic, conn)
 		return okbytes, nil
 	case OperationPub:
 		if err := topic.Publish(msg, conn); err != nil {

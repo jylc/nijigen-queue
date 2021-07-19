@@ -19,7 +19,7 @@ func main() {
 	}
 
 	data, err := proto.Marshal(&pb.Message{
-		Channel:   "key1",
+		Topic:     "key1",
 		Operation: core.OperationPub,
 		Content:   "11",
 	})

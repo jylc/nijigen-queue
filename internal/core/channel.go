@@ -15,8 +15,14 @@ type Channel struct {
 	lock sync.RWMutex
 }
 
-func (c *Channel) AddSubscriber(conn gnet.Conn) {
-	// TODO .
+func (c *Channel) AddSubscriber(channel string, conn gnet.Conn) error {
+	// TODO 添加订阅者时判断是否超出最大范围
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	if _, ok := c.m[channel]; !ok {
+		c.m[channel] = conn
+	}
+	return nil
 }
 
 func NewChannel() *Channel {
