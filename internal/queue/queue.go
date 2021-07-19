@@ -97,7 +97,7 @@ func (q *Queue) publish(conn gnet.Conn, pub *pb.Publish) error {
 
 	err = q.pool.Submit(func() {
 		if err = conn.AsyncWrite(msg); err != nil {
-			logrus.Errorf("channel [%s] write message [%s] to [%s] error: %s", pub.Channel, pub.Content, conn.RemoteAddr(), err)
+			logrus.Errorf("channel [%s] write message [%s] to [%s] error: %v", pub.Channel, pub.Content, conn.RemoteAddr(), err)
 		}
 	})
 	if err != nil {
