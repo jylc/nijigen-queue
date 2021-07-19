@@ -25,19 +25,23 @@ func NewNQ() *NQ {
 	}
 }
 
-func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
-	if _, ok := nq.topicMap[msg.Channel]; !ok {
+func (nq *NQ) fixTopic(topic string) {
+	if _, ok := nq.topicMap[topic]; !ok {
 		nq.lock.Lock()
-		if _, ok = nq.topicMap[msg.Channel]; !ok {
-			nq.topicMap[msg.Channel] = NewTopic()
+		if _, ok = nq.topicMap[topic]; !ok {
+			nq.topicMap[topic] = NewTopic()
 		}
 		nq.lock.Unlock()
 	}
+}
 
+func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
+	nq.fixTopic(msg.Channel) // TODO 消息增加 topic 字段
+	// TODO 在这中间可能出现删除的情况
 	nq.lock.RLock()
 	defer nq.lock.RUnlock()
 
-	topic := nq.topicMap[msg.Channel] // TODO 消息增加 topic 字段
+	topic := nq.topicMap[msg.Channel]
 	switch msg.Operation {
 	case OperationSub:
 		topic.Subscribe(msg.Channel, conn)
