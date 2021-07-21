@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"io"
-	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/panjf2000/gnet"
@@ -71,10 +70,5 @@ func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	if err != nil {
 		logrus.Infof("client [%s] disconnected and error occurd on close: %v", c.RemoteAddr(), err)
 	}
-	return
-}
-
-func (s *Server) Tick() (delay time.Duration, action gnet.Action) {
-	delay = 1 * time.Second
 	return
 }
