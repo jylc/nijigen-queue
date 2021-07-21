@@ -25,18 +25,8 @@ func NewNQ() *NQ {
 	}
 }
 
-func (nq *NQ) fixTopic(topic string) {
-	if _, ok := nq.topicMap[topic]; !ok {
-		nq.lock.Lock()
-		if _, ok = nq.topicMap[topic]; !ok {
-			nq.topicMap[topic] = NewTopic()
-		}
-		nq.lock.Unlock()
-	}
-}
-
 func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
-	nq.fixTopic(msg.Topic) // TODO 消息增加 topic 字段
+	nq.fixTopic(msg.Topic)
 	// TODO 在这中间可能出现删除的情况
 	nq.lock.RLock()
 	defer nq.lock.RUnlock()
@@ -57,5 +47,15 @@ func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
 		return okbytes, nil
 	default:
 		return nil, ErrOp
+	}
+}
+
+func (nq *NQ) fixTopic(topic string) {
+	if _, ok := nq.topicMap[topic]; !ok {
+		nq.lock.Lock()
+		if _, ok = nq.topicMap[topic]; !ok {
+			nq.topicMap[topic] = NewTopic()
+		}
+		nq.lock.Unlock()
 	}
 }

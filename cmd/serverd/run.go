@@ -16,12 +16,15 @@ func run(conf *Config) error {
 		return err
 	}
 
-	logrus.Fatal(gnet.Serve(
+	if err := gnet.Serve(
 		&Server{nq: core.NewNQ()},
 		fmt.Sprintf("tcp://0.0.0.0:%s", conf.port),
 		gnet.WithMulticore(true),
 		gnet.WithCodec(&decoder.MessageDecoder{}),
-	))
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
