@@ -33,7 +33,7 @@ func newCommand() (*cobra.Command, error) {
 		Use:   "nijigen [OPTIONS]",
 		Short: "A queue.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cfg)
+			return serve(cfg)
 		},
 		DisableFlagsInUseLine: true,
 	}

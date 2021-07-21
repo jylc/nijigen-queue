@@ -11,7 +11,7 @@ import (
 	"github.com/jylc/nijigen-queue/internal/decoder"
 )
 
-func run(conf *Config) error {
+func serve(conf *Config) error {
 	if err := configLogger(conf); err != nil {
 		return err
 	}
