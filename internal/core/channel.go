@@ -1,6 +1,7 @@
 package core
 
 import (
+	"net"
 	"sync"
 
 	"github.com/panjf2000/gnet"
@@ -40,9 +41,22 @@ func (c *Channel) Publish(conn gnet.Conn, content string) error {
 	}
 
 	err = pool.Submit(func() {
-		if err = conn.AsyncWrite(buf); err != nil {
-			logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, conn.RemoteAddr(), err)
+		var w func(int)
+		w = func(tryCnt int) {
+			if tryCnt > 3 {
+				return
+			}
+
+			if err = conn.AsyncWrite(buf); err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+					// 重试
+					w(tryCnt + 1)
+					return
+				}
+				logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, conn.RemoteAddr(), err)
+			}
 		}
+		w(0)
 	})
 	if err != nil {
 		return err
