@@ -1,0 +1,10 @@
+syntax = "proto3";
+package proto;
+
+option go_package = "../pb";
+
+message PublicRequest {
+  string topic = 1;
+  string channel = 2;
+  string content = 3;
+}

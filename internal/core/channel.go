@@ -5,8 +5,8 @@ import (
 
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 
+	"github.com/jylc/nijigen-queue/internal/builder"
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
@@ -33,15 +33,15 @@ func NewChannel(channel string) *Channel {
 	}
 }
 
-func (c *Channel) Publish(conn gnet.Conn, pub *pb.Publish) error {
-	msg, err := proto.Marshal(pub)
+func (c *Channel) Publish(conn gnet.Conn, content string) error {
+	buf, err := builder.MessageReceive(&pb.PublicResponse{Content: content})
 	if err != nil {
 		return err
 	}
 
 	err = pool.Submit(func() {
-		if err = conn.AsyncWrite(msg); err != nil {
-			logrus.Errorf("channel [%s] write message [%s] to [%s] error: %v", pub.Channel, pub.Content, conn.RemoteAddr(), err)
+		if err = conn.AsyncWrite(buf); err != nil {
+			logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, conn.RemoteAddr(), err)
 		}
 	})
 	if err != nil {

@@ -3,7 +3,6 @@ package proto;
 
 option go_package = "../pb";
 
-message Publish {
-  string channel = 1;
-  string content = 2;
+message PublicResponse {
+  string content = 1;
 }

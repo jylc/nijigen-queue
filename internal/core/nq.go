@@ -1,8 +1,10 @@
 package core
 
 import (
+	"errors"
 	"sync"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
@@ -11,7 +13,11 @@ import (
 )
 
 var (
+	ErrOp = errors.New("invalid operation")
+
 	pool = goroutine.Default()
+
+	okbytes = []byte("OK")
 )
 
 type NQ struct {
@@ -25,16 +31,25 @@ func NewNQ() *NQ {
 	}
 }
 
-func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
-	topic := nq.GetTopic(msg.Topic)
-	switch msg.Operation {
+func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
+	switch frame[0] {
 	case OperationSub:
-		if err := topic.Subscribe(msg.Topic, conn); err != nil {
+		msg := &pb.SubscribeRequest{}
+		if err := proto.NewBuffer(frame[1:]).Unmarshal(msg); err != nil {
+			return nil, err
+		}
+
+		if err := nq.GetTopic(msg.Topic).Subscribe(msg.Channel, conn); err != nil {
 			return nil, err
 		}
 		return okbytes, nil
 	case OperationPub:
-		if err := topic.Publish(msg, conn); err != nil {
+		msg := &pb.PublicRequest{}
+		if err := proto.NewBuffer(frame[1:]).Unmarshal(msg); err != nil {
+			return nil, err
+		}
+
+		if err := nq.GetTopic(msg.Topic).Publish(msg, conn); err != nil {
 			return nil, err
 		}
 		return okbytes, nil

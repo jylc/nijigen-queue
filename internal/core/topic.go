@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/panjf2000/gnet"
@@ -13,13 +12,6 @@ import (
 const (
 	OperationSub = iota + 1
 	OperationPub
-)
-
-var (
-	ErrOp    = errors.New("invalid operation")
-	ErrNoSub = errors.New("no subscriber")
-
-	okbytes = []byte("OK")
 )
 
 type Topic struct {
@@ -69,16 +61,25 @@ func (t *Topic) Subscribe(channel string, conn gnet.Conn) error {
 	return nil
 }
 
-func (t *Topic) Publish(msg *pb.Message, conn gnet.Conn) error {
-	logrus.Infof("pub: [%s] publish TOPIC(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Content)
+func (t *Topic) Publish(msg *pb.PublicRequest, conn gnet.Conn) error {
 
-	for _, ch := range t.chmap {
-		err := ch.Publish(conn, &pb.Publish{
-			Channel: msg.Topic,
-			Content: msg.Content,
-		})
-		if err != nil {
-			logrus.Errorf("TOPIC(%s) publish to CHANNEL(%s) error: %v", t.name, ch.name, err)
+	if msg.Channel == "" {
+		logrus.Infof("pub: [%s] publish TOPIC(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Content)
+
+		t.lock.RLock()
+		defer t.lock.RUnlock()
+
+		// 不指定 channel 的时候给每个 channel 都发消息
+		for _, ch := range t.chmap {
+			err := ch.Publish(conn, msg.Content)
+			if err != nil {
+				logrus.Errorf("TOPIC(%s) publish to CHANNEL(%s) error: %v", t.name, ch.name, err)
+			}
+		}
+	} else {
+		logrus.Infof("pub: [%s] publish TOPIC(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Content)
+		if err := t.GetChannel(msg.Channel).Publish(conn, msg.Content); err != nil {
+			return err
 		}
 	}
 
