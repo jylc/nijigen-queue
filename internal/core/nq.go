@@ -26,12 +26,7 @@ func NewNQ() *NQ {
 }
 
 func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
-	nq.fixTopic(msg.Topic)
-	// TODO 在这中间可能出现删除的情况
-	nq.lock.RLock()
-	defer nq.lock.RUnlock()
-
-	topic := nq.topicMap[msg.Topic]
+	topic := nq.GetTopic(msg.Topic)
 	switch msg.Operation {
 	case OperationSub:
 		topic.Subscribe(msg.Topic, conn)
@@ -50,12 +45,24 @@ func (nq *NQ) Handle(msg *pb.Message, conn gnet.Conn) ([]byte, error) {
 	}
 }
 
-func (nq *NQ) fixTopic(topic string) {
-	if _, ok := nq.topicMap[topic]; !ok {
-		nq.lock.Lock()
-		if _, ok = nq.topicMap[topic]; !ok {
-			nq.topicMap[topic] = NewTopic()
-		}
-		nq.lock.Unlock()
+func (nq *NQ) GetTopic(topic string) *Topic {
+	nq.lock.RLock()
+	t, ok := nq.topicMap[topic]
+	nq.lock.RUnlock()
+	if ok {
+		return t
 	}
+
+	nq.lock.Lock()
+	t, ok = nq.topicMap[topic]
+	if ok {
+		nq.lock.Unlock()
+		return t
+	}
+	nq.topicMap[topic] = NewTopic()
+	nq.lock.Unlock()
+
+	logrus.Infof("TOPIC(%s): created", topic)
+
+	return nq.GetTopic(topic)
 }
