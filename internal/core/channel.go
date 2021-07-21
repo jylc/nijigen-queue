@@ -11,6 +11,7 @@ import (
 )
 
 type Channel struct {
+	name string
 	m    map[string]gnet.Conn
 	lock sync.RWMutex
 }
@@ -25,9 +26,10 @@ func (c *Channel) AddSubscriber(channel string, conn gnet.Conn) error {
 	return nil
 }
 
-func NewChannel() *Channel {
+func NewChannel(channel string) *Channel {
 	return &Channel{
-		m: make(map[string]gnet.Conn),
+		name: channel,
+		m:    make(map[string]gnet.Conn),
 	}
 }
 

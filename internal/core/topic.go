@@ -23,57 +23,63 @@ var (
 )
 
 type Topic struct {
+	name  string
 	chmap map[string]*Channel
 	lock  sync.RWMutex
 }
 
-func NewTopic() *Topic {
+func NewTopic(topic string) *Topic {
 	return &Topic{
+		name:  topic,
 		chmap: make(map[string]*Channel),
 	}
 }
 
-func (t *Topic) fixCh(channel string) {
-	if _, ok := t.chmap[channel]; !ok {
-		t.lock.Lock()
-		if _, ok = t.chmap[channel]; !ok {
-			t.chmap[channel] = NewChannel()
-		}
-		t.lock.Unlock()
+func (t *Topic) GetChannel(channel string) *Channel {
+	t.lock.RLock()
+	ch, ok := t.chmap[channel]
+	t.lock.RUnlock()
+
+	if ok {
+		return ch
 	}
+
+	t.lock.Lock()
+	ch, ok = t.chmap[channel]
+	if ok {
+		t.lock.Unlock()
+		return ch
+	}
+	t.chmap[channel] = NewChannel(channel)
+	t.lock.Unlock()
+
+	logrus.Infof("TOPIC(%s)-Channel(%s): created", t.name, channel)
+
+	return t.GetChannel(channel)
 }
 
-func (t *Topic) Subscribe(channel string, conn gnet.Conn) {
-	logrus.Infof("sub: [%s] subscribe [%s]", conn.RemoteAddr().String(), channel)
+func (t *Topic) Subscribe(channel string, conn gnet.Conn) error {
+	logrus.Infof("sub: [%s] subscribe TOPIC(%s)-CHANNEL(%s)", conn.RemoteAddr().String(), t.name, channel)
 
-	t.fixCh(channel)
-
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-
-	ch := t.chmap[channel]
+	ch := t.GetChannel(channel)
 	err := ch.AddSubscriber(channel, conn)
 	if err != nil {
-		logrus.Errorf("AddSubscriber failed (%s)\n", err.Error())
+		return err
 	}
+	return nil
 }
 
 func (t *Topic) Publish(msg *pb.Message, conn gnet.Conn) error {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
+	logrus.Infof("pub: [%s] publish TOPIC(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Content)
 
-	logrus.Infof("pub: [%s] publish channel [%s] with content [%s]", conn.RemoteAddr().String(), msg.Topic, msg.Content)
-
-	if ch, ok := t.chmap[msg.Topic]; ok {
+	for _, ch := range t.chmap {
 		err := ch.Publish(conn, &pb.Publish{
 			Channel: msg.Topic,
 			Content: msg.Content,
 		})
 		if err != nil {
-			return err
+			logrus.Errorf("TOPIC(%s) publish to CHANNEL(%s) error: %v", t.name, ch.name, err)
 		}
-	} else {
-		return ErrNoSub
 	}
 
 	return nil
