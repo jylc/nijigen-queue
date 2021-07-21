@@ -49,7 +49,7 @@ func (t *Topic) Subscribe(channel string, conn gnet.Conn) error {
 	logrus.Infof("sub: [%s] subscribe TOPIC(%s)-CHANNEL(%s)", conn.RemoteAddr().String(), t.name, channel)
 
 	ch := t.GetChannel(channel)
-	err := ch.AddSubscriber(channel, conn)
+	err := ch.AddSubscriber(conn)
 	if err != nil {
 		return err
 	}
@@ -65,14 +65,14 @@ func (t *Topic) Publish(msg *pb.PublicRequest, conn gnet.Conn) error {
 
 		// 不指定 channel 的时候给每个 channel 都发消息
 		for _, ch := range t.chmap {
-			err := ch.Publish(conn, msg.Content)
+			err := ch.Publish(msg.Content)
 			if err != nil {
-				logrus.Errorf("TOPIC(%s) publish to CHANNEL(%s) error: %v", t.name, ch.name, err)
+				logrus.Errorf("pub: [%s] publish TOPIC(%s)-CHANNEL(%s) with content [%s] occurd error: %v", conn.RemoteAddr().String(), t.name, ch.name, msg.Content, err)
 			}
 		}
 	} else {
-		logrus.Infof("pub: [%s] publish TOPIC(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Content)
-		if err := t.GetChannel(msg.Channel).Publish(conn, msg.Content); err != nil {
+		logrus.Infof("pub: [%s] publish TOPIC(%s)-CHANNEL(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Channel, msg.Content)
+		if err := t.GetChannel(msg.Channel).Publish(msg.Content); err != nil {
 			return err
 		}
 	}

@@ -16,11 +16,6 @@ type MessageDecoder struct {
 }
 
 func (m *MessageDecoder) Encode(c gnet.Conn, buf []byte) ([]byte, error) {
-	if c.Context() == nil {
-		return buf, nil
-	}
-
-	// TODO handle error
 	return buf, nil
 }
 
