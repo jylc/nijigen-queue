@@ -7,7 +7,7 @@ import (
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
-	"github.com/jylc/nijigen-queue/internal/builder"
+	"github.com/jylc/nijigen-queue/internal/message"
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
@@ -35,7 +35,7 @@ func NewChannel(channel string) *Channel {
 }
 
 func (c *Channel) Publish(conn gnet.Conn, content string) error {
-	buf, err := builder.MessageReceive(&pb.PublicResponse{Content: content})
+	buf, err := message.BuildReceiveMessage(&pb.PublicResponse{Content: content})
 	if err != nil {
 		return err
 	}

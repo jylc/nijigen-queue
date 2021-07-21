@@ -1,14 +1,12 @@
 package main
 
 import (
-	"encoding/binary"
 	"net"
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 
-	"github.com/jylc/nijigen-queue/internal/core"
+	"github.com/jylc/nijigen-queue/internal/message"
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
@@ -18,19 +16,15 @@ func main() {
 		panic(err)
 	}
 
-	data, err := proto.Marshal(&pb.Message{
-		Topic:     "key1",
-		Operation: core.OperationPub,
-		Content:   "11",
+	data, err := message.BuildSubscribeRequest(&pb.SubscribeRequest{
+		Topic:   "topic-1",
+		Channel: "channel-1",
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	l := uint32(len(data))
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, l)
-	_, err = conn.Write(append(buf, data...))
+	_, err = conn.Write(data)
 	if err != nil {
 		panic(err)
 	}

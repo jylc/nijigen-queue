@@ -9,11 +9,6 @@ import (
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
-const (
-	OperationSub = iota + 1
-	OperationPub
-)
-
 type Topic struct {
 	name  string
 	chmap map[string]*Channel
@@ -62,7 +57,6 @@ func (t *Topic) Subscribe(channel string, conn gnet.Conn) error {
 }
 
 func (t *Topic) Publish(msg *pb.PublicRequest, conn gnet.Conn) error {
-
 	if msg.Channel == "" {
 		logrus.Infof("pub: [%s] publish TOPIC(%s) with content [%s]", conn.RemoteAddr().String(), t.name, msg.Content)
 

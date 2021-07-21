@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/jylc/nijigen-queue/internal/goroutine"
+	"github.com/jylc/nijigen-queue/internal/message"
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
@@ -33,7 +34,7 @@ func NewNQ() *NQ {
 
 func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
 	switch frame[0] {
-	case OperationSub:
+	case message.OperationSub:
 		msg := &pb.SubscribeRequest{}
 		if err := proto.NewBuffer(frame[1:]).Unmarshal(msg); err != nil {
 			return nil, err
@@ -43,7 +44,7 @@ func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
 			return nil, err
 		}
 		return okbytes, nil
-	case OperationPub:
+	case message.OperationPub:
 		msg := &pb.PublicRequest{}
 		if err := proto.NewBuffer(frame[1:]).Unmarshal(msg); err != nil {
 			return nil, err
