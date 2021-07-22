@@ -17,8 +17,6 @@ func main() {
 		outerWG.Add(1)
 		go func() {
 			conn := newConn()
-			defer conn.Close()
-
 			sub(conn)
 
 			var wg sync.WaitGroup
@@ -33,7 +31,7 @@ func main() {
 		}()
 	}
 	outerWG.Done()
-	time.Sleep(5 * time.Second)
+	time.Sleep(50 * time.Second)
 }
 
 func newConn() net.Conn {
