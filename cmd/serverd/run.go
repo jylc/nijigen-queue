@@ -21,6 +21,8 @@ func serve(conf *Config) error {
 		fmt.Sprintf("tcp://0.0.0.0:%s", conf.port),
 		gnet.WithMulticore(true),
 		gnet.WithCodec(&decoder.MessageDecoder{}),
+		gnet.WithLogger(logrus.StandardLogger()),
+		//gnet.WithTCPKeepAlive(5*time.Second),
 	); err != nil {
 		return err
 	}

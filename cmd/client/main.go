@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/jylc/nijigen-queue/internal/message"
@@ -12,41 +12,58 @@ import (
 )
 
 func main() {
-	cnt := int64(0)
-
-	conn := newConn()
-	defer conn.Close()
-
-	sub(conn)
-
-	var wg sync.WaitGroup
-	for i := 0; i < 10000; i++ {
-		wg.Add(1)
+	var outerWG sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		outerWG.Add(1)
 		go func() {
-			defer wg.Done()
+			conn := newConn()
+			defer conn.Close()
 
-			pub(conn)
-			fmt.Println(atomic.AddInt64(&cnt, 1))
+			sub(conn)
+
+			var wg sync.WaitGroup
+			for i := 0; i < 100; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					pub(conn)
+				}()
+			}
+			wg.Wait()
 		}()
 	}
-	wg.Wait()
-
+	outerWG.Done()
 	time.Sleep(5 * time.Second)
 }
 
 func newConn() net.Conn {
-	conn, err := net.Dial("tcp", "0.0.0.0:6789")
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{
+		IP:   net.IPv4(127, 0, 0, 1),
+		Port: 6789,
+	})
 	if err != nil {
 		panic(err)
 	}
+
+	//err = conn.SetDeadline(time.Time{})
+	//if err != nil {
+	//	panic(err)
+	//}
+
+	//if err = conn.SetKeepAlive(true); err != nil {
+	//	panic(err)
+	//}
+	//if err = conn.SetKeepAlivePeriod(5 * time.Second); err != nil {
+	//	panic(err)
+	//}
 
 	return conn
 }
 
 func sub(conn net.Conn) {
 	data, err := message.BuildSubscribeRequest(&pb.SubscribeRequest{
-		Topic:   "topic-1",
-		Channel: "channel-1",
+		Topic:   fmt.Sprintf("topic-%d", rand.Intn(100)),
+		Channel: fmt.Sprintf("channel-%d", rand.Intn(100)),
 	})
 	if err != nil {
 		panic(err)
@@ -60,8 +77,8 @@ func sub(conn net.Conn) {
 
 func pub(conn net.Conn) {
 	data, err := message.BuildPublicRequest(&pb.PublicRequest{
-		Topic:   "topic-1",
-		Channel: "channel-1",
+		Topic:   fmt.Sprintf("topic-%d", rand.Intn(100)),
+		Channel: fmt.Sprintf("channel-%d", rand.Intn(100)),
 		Content: "test content",
 	})
 	if err != nil {
