@@ -36,7 +36,7 @@ func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
 	switch frame[0] {
 	case message.OperationSub:
 		msg := &pb.SubscribeRequest{}
-		if err := proto.NewBuffer(frame[1:]).Unmarshal(msg); err != nil {
+		if err := proto.Unmarshal(frame[1:], msg); err != nil {
 			return nil, err
 		}
 
@@ -46,7 +46,7 @@ func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
 		return okbytes, nil
 	case message.OperationPub:
 		msg := &pb.PublicRequest{}
-		if err := proto.NewBuffer(frame[1:]).Unmarshal(msg); err != nil {
+		if err := proto.Unmarshal(frame[1:], msg); err != nil {
 			return nil, err
 		}
 

@@ -2,6 +2,7 @@ package decoder
 
 import (
 	"encoding/binary"
+	"errors"
 
 	"github.com/panjf2000/gnet"
 )
@@ -11,45 +12,46 @@ const (
 	typeByte   = 1
 )
 
-type MessageDecoder struct {
-	buf []byte
-}
+var (
+	ErrUnexpectedEOF = errors.New("there is no enough data")
+)
+
+type innerBuffer []byte
+
+type MessageDecoder struct{}
 
 func (m *MessageDecoder) Encode(c gnet.Conn, buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
 func (m *MessageDecoder) Decode(c gnet.Conn) ([]byte, error) {
-	buf := c.Read()
-	c.ResetBuffer()
-
-	dataBuf := append(m.buf, buf...)
-	curBufferLen := len(dataBuf)
-	msgLen := m.lengthOfMessage(dataBuf)
-	totalLen := lengthByte + typeByte + msgLen // [0,0,0,0,0,...]
-
-	if msgLen == -1 {
-		m.buf = dataBuf
-		return nil, nil
-	} else if totalLen > curBufferLen {
-		// 请求未准备好
-		m.buf = dataBuf
-		return nil, nil
-	} else if totalLen == curBufferLen {
-		// 没有剩余
-		m.buf = m.buf[0:0]
-		return dataBuf[lengthByte:], nil
-	} else { // msgLen+lengthByte+typeByte < curBufferLen
-		// 有剩余
-		m.buf = dataBuf[totalLen:]
-		return dataBuf[lengthByte:totalLen], nil
+	var (
+		in     innerBuffer
+		lenBuf []byte
+		err    error
+	)
+	in = c.Read()
+	lenBuf, err = in.readLen()
+	if err != nil {
+		return nil, err
 	}
+
+	msgLen := int(binary.BigEndian.Uint32(lenBuf))
+	if len(in) < lengthByte+typeByte+msgLen {
+		return nil, ErrUnexpectedEOF
+	}
+
+	fullMessage := make([]byte, typeByte+msgLen)
+	copy(fullMessage, in[lengthByte:lengthByte+typeByte+msgLen])
+
+	c.ShiftN(lengthByte + typeByte + msgLen)
+	return fullMessage, nil
 }
 
-func (m *MessageDecoder) lengthOfMessage(buf []byte) int {
-	if len(buf) < lengthByte {
-		return -1
+func (ib *innerBuffer) readLen() ([]byte, error) {
+	if len(*ib) < lengthByte {
+		return nil, ErrUnexpectedEOF
 	}
 
-	return int(binary.BigEndian.Uint32(buf[:lengthByte]))
+	return (*ib)[:lengthByte], nil
 }
