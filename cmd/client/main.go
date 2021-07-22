@@ -13,24 +13,28 @@ import (
 
 func main() {
 	var outerWG sync.WaitGroup
+	conns := make([]net.Conn, 0)
 	for i := 0; i < 10; i++ {
+		conns = append(conns, newConn())
+	}
+	for _, conn := range conns {
 		outerWG.Add(1)
-		go func() {
-			conn := newConn()
-			sub(conn)
+		go func(c net.Conn) {
+			defer outerWG.Done()
+			sub(c)
 
 			var wg sync.WaitGroup
-			for i := 0; i < 100; i++ {
+			for i := 0; i < 1000; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					pub(conn)
+					pub(c)
 				}()
 			}
 			wg.Wait()
-		}()
+		}(conn)
 	}
-	outerWG.Done()
+	outerWG.Wait()
 	time.Sleep(50 * time.Second)
 }
 
