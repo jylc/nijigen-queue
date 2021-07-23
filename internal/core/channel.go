@@ -48,29 +48,37 @@ func NewChannel(channel string) *Channel {
 }
 
 func (c *Channel) Publish(content string) error {
-	err := pool.Submit(func() {
-		c.lock.RLock()
-		defer c.lock.RUnlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
-		for _, conn := range c.subscribers {
-			_ = c.publish(conn, content)
+	for _, conn := range c.subscribers {
+		remoteAddr := conn.RemoteAddr()
+		if remoteAddr == nil { // TODO 删除策略
+			continue
 		}
-	})
-	if err != nil {
-		return err
+		err := pool.Submit(func() {
+			_ = c.publish(conn, remoteAddr.String(), content)
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (c *Channel) publish(conn gnet.Conn, content string) error {
+func (c *Channel) publish(conn gnet.Conn, remoteAddr string, content string) error {
+	if conn == nil {
+		return nil
+	}
+
 	buf, err := message.BuildReceiveMessage(&pb.PublicResponse{Content: content})
 	if err != nil {
 		return err
 	}
 
 	if err := conn.AsyncWrite(buf); err != nil {
-		logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, conn.RemoteAddr(), err)
+		logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, remoteAddr, err)
 	}
 
 	return nil
