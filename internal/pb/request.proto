@@ -3,7 +3,9 @@ package proto;
 
 option go_package = "../pb";
 
-message SubscribeRequest {
+message RequestProtobuf{
   string topic = 1;
   string channel = 2;
+  string content = 3;
+  string option = 4;
 }

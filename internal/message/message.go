@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
 // client
@@ -13,42 +14,35 @@ const (
 
 // server
 const (
-	OperationSub byte = 1
-	OperationPub byte = 2
+	OperationSub string = "sub"
+	OperationPub string = "pub"
 )
 
-func BuildSubscribeRequest(msg proto.Message) ([]byte, error) {
-	msgBuf, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	lenBuf := getLenBuf(msgBuf)
-	lenBuf = append(lenBuf, OperationSub)
-	return append(lenBuf, msgBuf...), nil
+type MetaMessage struct {
+	Topic   string
+	Channel string
+	Content string
 }
 
-func BuildPublicRequest(msg proto.Message) ([]byte, error) {
-	msgBuf, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
+func NewNQMetaMessage(request *pb.RequestProtobuf) *MetaMessage {
+	return &MetaMessage{
+		Topic:   request.Topic,
+		Channel: request.Channel,
+		Content: request.Content,
 	}
-	lenBuf := getLenBuf(msgBuf)
-	lenBuf = append(lenBuf, OperationPub)
-	return append(lenBuf, msgBuf...), nil
-}
-
-func BuildReceiveMessage(msg proto.Message) ([]byte, error) {
-	msgBuf, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	lenBuf := getLenBuf(msgBuf)
-	lenBuf = append(lenBuf, ReceiveType)
-	return append(lenBuf, msgBuf...), nil
 }
 
 func getLenBuf(msgBuf []byte) []byte {
 	lenBuf := make([]byte, 4, 5+len(msgBuf))
 	binary.BigEndian.PutUint32(lenBuf, uint32(len(msgBuf)))
 	return lenBuf
+}
+
+func BuildMessage(msg proto.Message) (buf []byte, err error) {
+	msgBuf, err := proto.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	lenBuf := getLenBuf(msgBuf)
+	return append(lenBuf, msgBuf...), nil
 }

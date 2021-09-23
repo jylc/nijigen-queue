@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/jylc/nijigen-queue/configs"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
@@ -24,33 +25,31 @@ var (
 type NQ struct {
 	topicMap map[string]*Topic
 	lock     sync.RWMutex
+	opts     *configs.Options
 }
 
 func NewNQ() *NQ {
 	return &NQ{
 		topicMap: make(map[string]*Topic),
+		opts:     configs.NewOptions(),
 	}
 }
 
 func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
-	switch frame[0] {
+	request := &pb.RequestProtobuf{}
+	if err := proto.Unmarshal(frame, request); err != nil {
+		return nil, err
+	}
+	switch request.Option {
 	case message.OperationSub:
-		msg := &pb.SubscribeRequest{}
-		if err := proto.Unmarshal(frame[1:], msg); err != nil {
-			return nil, err
-		}
-
+		msg := message.NewNQMetaMessage(request)
 		if err := nq.GetTopic(msg.Topic).Subscribe(msg.Channel, conn); err != nil {
 			return nil, err
 		}
 		return okbytes, nil
 	case message.OperationPub:
-		msg := &pb.PublicRequest{}
-		if err := proto.Unmarshal(frame[1:], msg); err != nil {
-			return nil, err
-		}
-
-		if err := nq.GetTopic(msg.Topic).Publish(msg, conn); err != nil {
+		msg := message.NewNQMetaMessage(request)
+		if err := nq.GetTopic(msg.Topic).Publish(msg); err != nil {
 			return nil, err
 		}
 		return okbytes, nil
@@ -73,10 +72,14 @@ func (nq *NQ) GetTopic(topic string) *Topic {
 		nq.lock.Unlock()
 		return t
 	}
-	nq.topicMap[topic] = NewTopic(topic)
+	nq.topicMap[topic] = NewTopic(topic, nq)
 	nq.lock.Unlock()
 
 	logrus.Infof("TOPIC(%s): created", topic)
 
 	return nq.GetTopic(topic)
+}
+
+func (nq *NQ) GetOpts() *configs.Options {
+	return nq.opts
 }

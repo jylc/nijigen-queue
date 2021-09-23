@@ -63,7 +63,8 @@ func newConn() net.Conn {
 }
 
 func sub(conn net.Conn) {
-	data, err := message.BuildSubscribeRequest(&pb.SubscribeRequest{
+	data, err := message.BuildMessage(&pb.RequestProtobuf{
+		Option:  message.OperationSub,
 		Topic:   fmt.Sprintf("topic-%d", rand.Intn(100)),
 		Channel: fmt.Sprintf("channel-%d", rand.Intn(100)),
 	})
@@ -78,7 +79,8 @@ func sub(conn net.Conn) {
 }
 
 func pub(conn net.Conn) {
-	data, err := message.BuildPublicRequest(&pb.PublicRequest{
+	data, err := message.BuildMessage(&pb.RequestProtobuf{
+		Option:  message.OperationPub,
 		Topic:   fmt.Sprintf("topic-%d", rand.Intn(100)),
 		Channel: fmt.Sprintf("channel-%d", rand.Intn(100)),
 		Content: "test content",

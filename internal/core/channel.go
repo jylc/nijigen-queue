@@ -72,7 +72,7 @@ func (c *Channel) publish(conn gnet.Conn, remoteAddr string, content string) err
 		return nil
 	}
 
-	buf, err := message.BuildReceiveMessage(&pb.PublicResponse{Content: content})
+	buf, err := message.BuildMessage(&pb.ResponseProtobuf{Content: content})
 	if err != nil {
 		return err
 	}

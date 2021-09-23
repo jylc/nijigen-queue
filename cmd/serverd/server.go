@@ -3,16 +3,19 @@ package main
 import (
 	"errors"
 	"io"
-
-	"github.com/panjf2000/gnet"
-	"github.com/sirupsen/logrus"
+	"sync/atomic"
 
 	"github.com/jylc/nijigen-queue/internal/core"
+	"github.com/jylc/nijigen-queue/internal/network"
+	"github.com/panjf2000/gnet"
+	"github.com/sirupsen/logrus"
 )
 
 type Server struct {
 	*gnet.EventServer
-	nq *core.NQ
+	nq            *core.NQ
+	connSerialNum int32
+	connAliveNum  int32
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
@@ -36,22 +39,32 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 		}
 	}
 
-	if res, err := s.nq.Handle(frame, c); err != nil {
-		onError(err)
-		return
+	client, ok := ctx.(*network.NQConn)
+	if ok && len(frame) > 0 {
+		client.FrameChan <- frame
 	} else {
-		out = res
-		action = gnet.None
-		return
+		client.Close <- true
+		close(client.FrameChan)
+		close(client.Close)
+		err := errors.New("cannot get connection client")
+		onError(err)
 	}
+	c.SetContext(client)
+	return
 }
 
 func (s *Server) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 	logrus.Infof("client [%s] connected", c.RemoteAddr())
+	atomic.AddInt32(&s.connAliveNum, 1)
+	atomic.AddInt32(&s.connSerialNum, 1)
+	client := network.NewNQConn(s.nq, c, s.connSerialNum)
+	c.SetContext(client)
+	go client.Rect(client.FrameChan, client.Close)
 	return
 }
 
 func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
+	atomic.AddInt32(&s.connAliveNum, -1)
 	if errors.Is(err, io.EOF) {
 		logrus.Infof("client [%s] disconnected", c.RemoteAddr())
 		return

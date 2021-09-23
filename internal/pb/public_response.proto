@@ -1,8 +1,0 @@
-syntax = "proto3";
-package proto;
-
-option go_package = "../pb";
-
-message PublicResponse {
-  string content = 1;
-}
