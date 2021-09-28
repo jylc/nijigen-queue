@@ -2,7 +2,10 @@ package core
 
 import (
 	"sync"
+	"time"
 
+	"github.com/jylc/nijigen-queue/internal/queue"
+	"github.com/jylc/nijigen-queue/tools"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
@@ -10,10 +13,29 @@ import (
 	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
+const (
+	MaxPriorityQueueCapacity = 20
+	MinPriorityQueueCapacity = 10
+	Latency                  = 100 * time.Millisecond
+	SlotNum                  = 300
+	Capacity                 = 100
+)
+
 type Channel struct {
+	nq *NQ
+
 	name        string
 	subscribers map[string]gnet.Conn
 	lock        sync.RWMutex
+
+	msgChan  chan *message.MetaMessage
+	sendChan chan interface{}
+
+	waitGroup tools.WaitGroupWrapper
+
+	//TODO 延迟消息队列
+	tw        *queue.TimeWheel
+	deferChan chan bool
 }
 
 func (c *Channel) AddSubscriber(conn gnet.Conn) error {
@@ -40,24 +62,36 @@ func (c *Channel) AddSubscriber(conn gnet.Conn) error {
 	return nil
 }
 
-func NewChannel(channel string) *Channel {
-	return &Channel{
+func NewChannel(channel string, nq *NQ) *Channel {
+	sendChan := make(chan interface{})
+	ch := &Channel{
 		name:        channel,
 		subscribers: make(map[string]gnet.Conn),
+		nq:          nq,
+		deferChan:   make(chan bool),
+		msgChan:     make(chan *message.MetaMessage, nq.GetOpts().MaxMessageNum),
+		sendChan:    sendChan,
+		tw:          queue.NewNQTimeWheel(Latency, SlotNum, Capacity, sendChan),
 	}
+	return ch
 }
 
-func (c *Channel) Publish(content string) error {
+func (c *Channel) Publish(msg *message.MetaMessage) error {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+	if msg.Latency != 0 {
+		c.tw.Set(msg.Latency, msg)
+		return nil
+	}
 
 	for _, conn := range c.subscribers {
 		remoteAddr := conn.RemoteAddr()
 		if remoteAddr == nil { // TODO 删除策略
 			continue
 		}
+
 		err := pool.Submit(func() {
-			_ = c.publish(conn, remoteAddr.String(), content)
+			_ = c.publish(conn, remoteAddr.String(), msg.Content)
 		})
 		if err != nil {
 			return err
@@ -80,6 +114,5 @@ func (c *Channel) publish(conn gnet.Conn, remoteAddr string, content string) err
 	if err := conn.AsyncWrite(buf); err != nil {
 		logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, remoteAddr, err)
 	}
-
 	return nil
 }

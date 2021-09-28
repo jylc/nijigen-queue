@@ -8,4 +8,5 @@ message RequestProtobuf{
   string channel = 2;
   string content = 3;
   string option = 4;
+  uint32 timeout = 5;
 }

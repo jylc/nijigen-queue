@@ -38,14 +38,14 @@ func (t *Topic) messagePump() {
 		case msg := <-t.msgChan:
 			if msg.Channel == "" {
 				for _, ch := range t.chmap {
-					err := ch.Publish(msg.Content)
+					err := ch.Publish(msg)
 					if err != nil {
 						logrus.Errorf("TOPIC(%s)-Channel(%s): publish message failed,messag:(%s)", t.name, ch.name, msg.Content)
 						continue
 					}
 				}
 			} else {
-				err := t.GetChannel(msg.Channel).Publish(msg.Content)
+				err := t.GetChannel(msg.Channel).Publish(msg)
 				if err != nil {
 					logrus.Errorf("TOPIC(%s)-Channel(%s): publish message failed,messag:(%s)", t.name, msg.Channel, msg.Content)
 					return
@@ -70,7 +70,7 @@ func (t *Topic) GetChannel(channel string) *Channel {
 		t.lock.Unlock()
 		return ch
 	}
-	t.chmap[channel] = NewChannel(channel)
+	t.chmap[channel] = NewChannel(channel, t.nq)
 	t.lock.Unlock()
 
 	logrus.Infof("TOPIC(%s)-Channel(%s): created", t.name, channel)
