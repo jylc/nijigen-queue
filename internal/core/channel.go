@@ -71,19 +71,41 @@ func NewChannel(channel string, nq *NQ) *Channel {
 		deferChan:   make(chan bool),
 		msgChan:     make(chan *message.MetaMessage, nq.GetOpts().MaxMessageNum),
 		sendChan:    sendChan,
-		tw:          queue.NewNQTimeWheel(Latency, SlotNum, Capacity, sendChan),
 	}
+	ch.tw, _ = queue.NewNQTimeWheel(Latency, SlotNum, Capacity, sendChan)
+
+	go ch.messagePump()
 	return ch
 }
 
+func (c *Channel) messagePump() {
+	for {
+		var msg *message.MetaMessage
+		select {
+		case value := <-c.sendChan:
+			item := value.(*queue.Item)
+			msg = item.Value.(*message.MetaMessage)
+		case value := <-c.msgChan:
+			msg = value
+		}
+		_ = c.publish(msg)
+	}
+}
+
 func (c *Channel) Publish(msg *message.MetaMessage) error {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	if msg.Latency != 0 {
 		c.tw.Set(msg.Latency, msg)
 		return nil
 	}
+	c.msgChan <- msg
+	return nil
+}
 
+func (c *Channel) publish(msg *message.MetaMessage) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	for _, conn := range c.subscribers {
 		remoteAddr := conn.RemoteAddr()
 		if remoteAddr == nil { // TODO 删除策略
@@ -91,17 +113,16 @@ func (c *Channel) Publish(msg *message.MetaMessage) error {
 		}
 
 		err := pool.Submit(func() {
-			_ = c.publish(conn, remoteAddr.String(), msg.Content)
+			_ = c.sendMsg(conn, remoteAddr.String(), msg.Content)
 		})
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (c *Channel) publish(conn gnet.Conn, remoteAddr string, content string) error {
+func (c *Channel) sendMsg(conn gnet.Conn, remoteAddr string, content string) error {
 	if conn == nil {
 		return nil
 	}

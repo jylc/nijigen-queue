@@ -6,6 +6,7 @@ import (
 
 type Item struct {
 	Latency time.Duration
+	Level   int
 	Value   interface{}
 }
 
@@ -28,7 +29,12 @@ func NewNQPriorityQueues(size int, capacity int) (queues []*PriorityQueue) {
 func (q *PriorityQueue) Len() int { return len(q.items) }
 
 func (q *PriorityQueue) Less(i, j int) bool {
-	return q.items[i].Latency < q.items[j].Latency
+	if q.items[i].Level < q.items[j].Level {
+		return true
+	} else if q.items[i].Latency < q.items[j].Latency {
+		return true
+	}
+	return false
 }
 
 func (q *PriorityQueue) Swap(i, j int) {
