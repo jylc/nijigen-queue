@@ -14,8 +14,8 @@ import (
 type Server struct {
 	*gnet.EventServer
 	nq            *core.NQ
-	connSerialNum int32
-	connAliveNum  int32
+	connSerialNum int64
+	connAliveNum  int64
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
@@ -39,32 +39,32 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 		}
 	}
 
-	client, ok := ctx.(*network.NQConn)
+	nqConn, ok := ctx.(*network.NQConn)
 	if ok && len(frame) > 0 {
-		client.FrameChan <- frame
+		nqConn.FrameChan <- frame
 	} else {
-		client.Close <- true
-		close(client.FrameChan)
-		close(client.Close)
-		err := errors.New("cannot get connection client")
+		nqConn.Close <- true
+		close(nqConn.FrameChan)
+		close(nqConn.Close)
+		err := errors.New("cannot get connection nqConn")
 		onError(err)
 	}
-	c.SetContext(client)
+	c.SetContext(nqConn)
 	return
 }
 
 func (s *Server) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
-	logrus.Infof("client [%s] connected", c.RemoteAddr())
-	atomic.AddInt32(&s.connAliveNum, 1)
-	atomic.AddInt32(&s.connSerialNum, 1)
-	client := network.NewNQConn(s.nq, c, s.connSerialNum)
-	c.SetContext(client)
-	go client.Rect(client.FrameChan, client.Close)
+	logrus.Infof("nqConn [%s] connected", c.RemoteAddr())
+	atomic.AddInt64(&s.connAliveNum, 1)
+	atomic.AddInt64(&s.connSerialNum, 1)
+	nqConn := network.NewNQConn(s.nq, c, s.connSerialNum)
+	c.SetContext(nqConn)
+	go nqConn.Rect(nqConn.FrameChan, nqConn.Close)
 	return
 }
 
 func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
-	atomic.AddInt32(&s.connAliveNum, -1)
+	atomic.AddInt64(&s.connAliveNum, -1)
 	if errors.Is(err, io.EOF) {
 		logrus.Infof("client [%s] disconnected", c.RemoteAddr())
 		return

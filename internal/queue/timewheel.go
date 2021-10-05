@@ -31,7 +31,7 @@ func NewNQTimeWheel(interval time.Duration, slotNum int, capacity int, sendChan 
 		ticker:    time.NewTicker(interval),
 		slots:     make([]*list.List, slotNum),
 		slotNum:   slotNum,
-		tickerPos: 0,
+		tickerPos: slotNum - 1,
 		itemChan:  make(chan interface{}),
 		stopChan:  make(chan interface{}),
 		sendChan:  sendChan,
@@ -45,9 +45,11 @@ func (t *TimeWheel) run() {
 	for {
 		select {
 		case <-t.ticker.C:
+			t.lock.Lock()
 			t.tickerPos = (t.tickerPos + 1) % t.slotNum
 			l := t.slots[t.tickerPos]
 			t.scanAndFlush(l)
+			t.lock.Unlock()
 		case item := <-t.itemChan:
 			t.put(item)
 		case <-t.stopChan:
@@ -76,7 +78,7 @@ func (t *TimeWheel) put(value interface{}) {
 		latency = time.Duration(int(latency % (t.interval * time.Duration(t.slotNum))))
 	}
 	step := int(latency / t.interval)
-	pos := (t.tickerPos + step) % t.slotNum
+	pos := (t.tickerPos + step + 1) % t.slotNum
 	slot := t.slots[pos]
 	item.Latency = latency % t.interval
 	item.Level = level

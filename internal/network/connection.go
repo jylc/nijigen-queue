@@ -13,22 +13,22 @@ const (
 )
 
 type NQConn struct {
-	connSerialNum int32
-	conn          gnet.Conn
-	state         int32
-	nq            *core.NQ
-	FrameChan     chan []byte
-	Close         chan bool
+	ID int64
+	gnet.Conn
+	state     int32
+	nq        *core.NQ
+	FrameChan chan []byte
+	Close     chan bool
 }
 
-func NewNQConn(nq *core.NQ, conn gnet.Conn, serialNum int32) *NQConn {
+func NewNQConn(nq *core.NQ, conn gnet.Conn, serialNum int64) *NQConn {
 	return &NQConn{
-		connSerialNum: serialNum,
-		conn:          conn,
-		nq:            nq,
-		FrameChan:     make(chan []byte, 10),
-		Close:         make(chan bool),
-		state:         connInit,
+		ID:        serialNum,
+		Conn:      conn,
+		nq:        nq,
+		FrameChan: make(chan []byte, 10),
+		Close:     make(chan bool),
+		state:     connInit,
 	}
 }
 
@@ -36,9 +36,9 @@ func (c *NQConn) Rect(FrameChan chan []byte, Close chan bool) {
 	for {
 		select {
 		case frame := <-FrameChan:
-			_, _ = c.nq.Handle(frame, c.conn)
+			_, _ = c.nq.Handle(frame, c)
 		case <-Close:
-			_ = c.conn.Close()
+			_ = c.Close
 			c.state = connClosed
 			return
 		default:
