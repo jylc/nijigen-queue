@@ -4,22 +4,16 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/jylc/nijigen-queue/configs"
-	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
 	"github.com/jylc/nijigen-queue/internal/goroutine"
-	"github.com/jylc/nijigen-queue/internal/message"
-	"github.com/jylc/nijigen-queue/internal/pb"
 )
 
 var (
 	ErrOp = errors.New("invalid operation")
 
 	pool = goroutine.Default()
-
-	okbytes = []byte("OK")
 )
 
 type NQ struct {
@@ -35,29 +29,10 @@ func NewNQ() *NQ {
 	}
 }
 
-func (nq *NQ) Handle(frame []byte, conn gnet.Conn) ([]byte, error) {
-	request := &pb.RequestProtobuf{}
-	if err := proto.Unmarshal(frame, request); err != nil {
-		return nil, err
-	}
-	switch request.Option {
-	case message.OperationSub:
-		msg := message.NewNQMetaMessage(request)
-		if err := nq.GetTopic(msg.Topic).Subscribe(msg.Channel, conn); err != nil {
-			return nil, err
-		}
-		return okbytes, nil
-	case message.OperationPub:
-		msg := message.NewNQMetaMessage(request)
-		if err := nq.GetTopic(msg.Topic).Publish(msg); err != nil {
-			return nil, err
-		}
-		return okbytes, nil
-	default:
-		return nil, ErrOp
-	}
-}
+//PushMessage nq向消费者推送消息
+func (nq *NQ) PushMessage() {
 
+}
 func (nq *NQ) GetTopic(topic string) *Topic {
 	nq.lock.RLock()
 	t, ok := nq.topicMap[topic]
@@ -82,4 +57,13 @@ func (nq *NQ) GetTopic(topic string) *Topic {
 
 func (nq *NQ) GetOpts() *configs.Options {
 	return nq.opts
+}
+
+func (nq *NQ) Close() {
+	for _, topic := range nq.topicMap {
+		err := topic.Close()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}
 }

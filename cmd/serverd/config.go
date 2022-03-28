@@ -22,5 +22,4 @@ func (c *Config) init(flags *pflag.FlagSet) {
 	flags.StringVarP(&c.port, "port", "p", "6789", "set listening port")
 	flags.BoolVarP(&c.Debug, "debug", "d", false, "enable debug mode")
 	flags.StringVarP(&c.LogLevel, "log", "l", "info", `set the logging level ("debug"|"info"|"warn"|"error"|"fatal")`)
-	// TODO config file
 }

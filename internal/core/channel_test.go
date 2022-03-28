@@ -1,14 +1,13 @@
 package core
 
 import (
+	"github.com/jylc/nijigen-queue/internal/message"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/jylc/nijigen-queue/internal/message"
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestNewChannel(t *testing.T) {

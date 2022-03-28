@@ -15,8 +15,13 @@ const (
 
 // server
 const (
-	OperationSub string = "sub"
-	OperationPub string = "pub"
+	OperationSub string = "SUB"
+	OperationPub string = "PUB"
+	OperationGet string = "GET"
+	OperationAck string = "ACK"
+	OperationFin string = "FIN"
+	OperationReq string = "REQ"
+	OperationRdy string = "RDY"
 )
 
 type MetaMessage struct {

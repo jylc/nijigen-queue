@@ -1,11 +1,11 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/jylc/nijigen-queue/internal/network"
 	"github.com/jylc/nijigen-queue/internal/queue"
 	"github.com/jylc/nijigen-queue/tools"
 	"github.com/panjf2000/gnet"
@@ -29,10 +29,11 @@ type Channel struct {
 	subscribers map[int64]gnet.Conn
 	lock        sync.RWMutex
 
-	msgChan   chan *message.MetaMessage
-	sendChan  chan interface{}
-	closeChan chan interface{}
-	testChan  chan interface{}
+	msgChan    chan *message.MetaMessage
+	resMsgChan chan []byte
+	sendChan   chan interface{}
+	closeChan  chan interface{}
+	testChan   chan interface{}
 
 	waitGroup tools.WaitGroupWrapper
 
@@ -41,8 +42,10 @@ type Channel struct {
 }
 
 func (c *Channel) AddSubscriber(conn gnet.Conn) error {
-	// TODO 添加订阅者时判断是否超出最大范围
-	key := conn.(*network.NQConn).ID
+	key := conn.(*NQConn).ID
+	if int32(len(c.subscribers)) > c.nq.opts.MaxSubscriber {
+		return errors.New("subscriber size is larger than config,can not add anymore")
+	}
 	c.lock.RLock()
 	_, ok := c.subscribers[key]
 	c.lock.RUnlock()
@@ -62,6 +65,22 @@ func (c *Channel) AddSubscriber(conn gnet.Conn) error {
 	c.lock.Unlock()
 
 	return nil
+}
+
+func (c *Channel) RemoveSubscriber(conn gnet.Conn) {
+	key := conn.(*NQConn).ID
+	c.lock.RLock()
+
+	_, ok := c.subscribers[key]
+	c.lock.RUnlock()
+	if !ok {
+		err := errors.New("do not contain the subscriber")
+		logrus.Error(err)
+	}
+
+	c.lock.Lock()
+	delete(c.subscribers, key)
+	c.lock.Unlock()
 }
 
 func NewChannel(channel string, nq *NQ) *Channel {
@@ -97,10 +116,8 @@ func (c *Channel) messagePump() {
 		case value := <-c.msgChan:
 			msg = value
 		case <-c.closeChan:
-			c.tw.Stop()
 			return
 		}
-		//c.testChan <- msg
 		if err := c.publish(msg); err != nil {
 			logrus.Error(err)
 			close(c.closeChan)
@@ -124,8 +141,8 @@ func (c *Channel) publish(msg *message.MetaMessage) error {
 	defer c.lock.Unlock()
 	for _, conn := range c.subscribers {
 		remoteAddr := conn.RemoteAddr()
-		if remoteAddr == nil { // TODO 删除策略
-			delete(c.subscribers, conn.(*network.NQConn).ID)
+		if remoteAddr == nil {
+			delete(c.subscribers, conn.(*NQConn).ID)
 			if len(c.subscribers) == 0 {
 				c.subscribers = nil
 			}
@@ -133,7 +150,7 @@ func (c *Channel) publish(msg *message.MetaMessage) error {
 		}
 
 		err := pool.Submit(func() {
-			_ = c.sendMsg(conn, remoteAddr.String(), msg.Content)
+			_ = c.sendMsg(conn, msg.Content)
 		})
 		if err != nil {
 			return err
@@ -142,7 +159,7 @@ func (c *Channel) publish(msg *message.MetaMessage) error {
 	return nil
 }
 
-func (c *Channel) sendMsg(conn gnet.Conn, remoteAddr string, content string) error {
+func (c *Channel) sendMsg(conn gnet.Conn, content string) error {
 	if conn == nil {
 		return nil
 	}
@@ -151,9 +168,23 @@ func (c *Channel) sendMsg(conn gnet.Conn, remoteAddr string, content string) err
 	if err != nil {
 		return err
 	}
+	c.resMsgChan <- buf
+	return nil
+}
 
-	if err := conn.AsyncWrite(buf); err != nil {
-		logrus.Errorf("CHANNEL(%s) write message [%s] to [%s] error: %v", c.name, content, remoteAddr, err)
+func (c *Channel) GetMsg() []byte {
+	var msg []byte
+	for {
+		select {
+		case msg = <-c.resMsgChan:
+		}
+		break
 	}
+	return msg
+}
+
+func (c *Channel) Close() error {
+	c.tw.Stop()
+	close(c.closeChan)
 	return nil
 }

@@ -16,8 +16,19 @@ type Topic struct {
 	lock      sync.RWMutex
 	waitGroup tools.WaitGroupWrapper
 	msgChan   chan *message.MetaMessage
+	closeChan chan bool
 	msgCount  int32
 	nq        *NQ
+}
+
+func GetTopic(topicName string, nq *NQ) {
+	var topic *Topic
+	var ok bool
+	if topic, ok = nq.topicMap[topicName]; !ok {
+		topic = NewTopic(topicName, nq)
+		nq.topicMap[topicName] = topic
+		logrus.Infof("TOPIC(%s):Created", topicName)
+	}
 }
 
 func NewTopic(topic string, nq *NQ) *Topic {
@@ -38,11 +49,12 @@ func (t *Topic) messagePump() {
 		case msg := <-t.msgChan:
 			if msg.Channel == "" {
 				for _, ch := range t.chmap {
-					err := ch.Publish(msg)
-					if err != nil {
-						logrus.Errorf("TOPIC(%s)-Channel(%s): publish message failed,messag:(%s)", t.name, ch.name, msg.Content)
-						continue
-					}
+					go func(c *Channel) {
+						err := c.Publish(msg)
+						if err != nil {
+							logrus.Errorf("TOPIC(%s)-Channel(%s): publish message failed,messag:(%s)", t.name, c.name, msg.Content)
+						}
+					}(ch)
 				}
 			} else {
 				err := t.GetChannel(msg.Channel).Publish(msg)
@@ -51,6 +63,8 @@ func (t *Topic) messagePump() {
 					return
 				}
 			}
+		case <-t.closeChan:
+			return
 		}
 	}
 }
@@ -90,9 +104,18 @@ func (t *Topic) Subscribe(channel string, conn gnet.Conn) error {
 }
 
 func (t *Topic) Publish(msg *message.MetaMessage) error {
-	select {
-	case t.msgChan <- msg:
-		atomic.AddInt32(&t.msgCount, 1)
+	t.lock.Lock()
+	t.msgChan <- msg
+	atomic.AddInt32(&t.msgCount, 1)
+	t.lock.Unlock()
+	return nil
+}
+
+func (t *Topic) Close() error {
+	for _, channel := range t.chmap {
+		if err := channel.Close(); err != nil {
+			logrus.Error(err)
+		}
 	}
 	return nil
 }

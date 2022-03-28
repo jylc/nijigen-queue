@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 
 	"github.com/jylc/nijigen-queue/internal/core"
-	"github.com/jylc/nijigen-queue/internal/network"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 )
@@ -39,13 +38,14 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 		}
 	}
 
-	nqConn, ok := ctx.(*network.NQConn)
+	nqConn, ok := ctx.(*core.NQConn)
 	if ok && len(frame) > 0 {
+		logrus.Infof("NQ CONNECT ID:%d", nqConn.ID)
 		nqConn.FrameChan <- frame
 	} else {
-		nqConn.Close <- true
+		nqConn.CloseChan <- true
 		close(nqConn.FrameChan)
-		close(nqConn.Close)
+		close(nqConn.CloseChan)
 		err := errors.New("cannot get connection nqConn")
 		onError(err)
 	}
@@ -57,19 +57,35 @@ func (s *Server) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 	logrus.Infof("nqConn [%s] connected", c.RemoteAddr())
 	atomic.AddInt64(&s.connAliveNum, 1)
 	atomic.AddInt64(&s.connSerialNum, 1)
-	nqConn := network.NewNQConn(s.nq, c, s.connSerialNum)
+	nqConn := core.NewNQConn(s.nq, c, s.connSerialNum)
 	c.SetContext(nqConn)
-	go nqConn.Rect(nqConn.FrameChan, nqConn.Close)
+	go nqConn.Rect(nqConn.FrameChan, nqConn.CloseChan)
 	return
 }
 
 func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	atomic.AddInt64(&s.connAliveNum, -1)
+	if s.connAliveNum == 0 {
+		atomic.StoreInt64(&s.connSerialNum, 0)
+		s.nq.Close()
+	}
+	ctx := c.Context()
+	if ctx != nil {
+		if err, ok := ctx.(error); ok {
+			logrus.Error(err)
+			return
+		}
+	}
+	nqConn, ok := c.(*core.NQConn)
+	if !ok {
+		logrus.Error("cannot get nq")
+	}
+
 	if errors.Is(err, io.EOF) {
 		logrus.Infof("client [%s] disconnected", c.RemoteAddr())
 		return
 	}
-
+	err = nqConn.Close()
 	if err != nil {
 		logrus.Infof("client [%s] disconnected and error occurd on close: %v", c.RemoteAddr(), err)
 	}
