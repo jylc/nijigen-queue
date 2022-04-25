@@ -30,6 +30,7 @@ type Channel struct {
 	lock        sync.RWMutex
 
 	msgChan    chan *message.MetaMessage
+	Notify     chan bool
 	resMsgChan chan []byte
 	sendChan   chan interface{}
 	closeChan  chan interface{}
@@ -90,10 +91,12 @@ func NewChannel(channel string, nq *NQ) *Channel {
 		subscribers: make(map[int64]gnet.Conn),
 		nq:          nq,
 		deferChan:   make(chan bool),
+		Notify:      make(chan bool),
 		msgChan:     make(chan *message.MetaMessage, MessageNum),
 		sendChan:    sendChan,
 		closeChan:   make(chan interface{}),
 		testChan:    make(chan interface{}),
+		resMsgChan:  make(chan []byte),
 	}
 	var err error
 	ch.tw, err = queue.NewNQTimeWheel(Latency, SlotNum, Capacity, sendChan)
@@ -113,8 +116,10 @@ func (c *Channel) messagePump() {
 			if item, ok := value.(*queue.Item); ok {
 				msg = item.Value.(*message.MetaMessage)
 			}
+			c.Notify <- true
 		case value := <-c.msgChan:
 			msg = value
+			c.Notify <- true
 		case <-c.closeChan:
 			return
 		}
@@ -128,10 +133,10 @@ func (c *Channel) messagePump() {
 func (c *Channel) Publish(msg *message.MetaMessage) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if msg.Latency != 0 {
+	/*if msg.Latency != 0 {
 		c.tw.Set(msg.Latency, msg)
 		return nil
-	}
+	}*/
 	c.msgChan <- msg
 	return nil
 }
@@ -174,6 +179,7 @@ func (c *Channel) sendMsg(conn gnet.Conn, content string) error {
 
 func (c *Channel) GetMsg() []byte {
 	var msg []byte
+
 	for {
 		select {
 		case msg = <-c.resMsgChan:

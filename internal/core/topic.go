@@ -92,22 +92,20 @@ func (t *Topic) GetChannel(channel string) *Channel {
 	return t.GetChannel(channel)
 }
 
-func (t *Topic) Subscribe(channel string, conn gnet.Conn) error {
+func (t *Topic) Subscribe(channel string, conn gnet.Conn) (*Channel, error) {
 	logrus.Infof("sub: [%s] subscribe TOPIC(%s)-CHANNEL(%s)", conn.RemoteAddr().String(), t.name, channel)
 
 	ch := t.GetChannel(channel)
 	err := ch.AddSubscriber(conn)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return ch, nil
 }
 
 func (t *Topic) Publish(msg *message.MetaMessage) error {
-	t.lock.Lock()
 	t.msgChan <- msg
 	atomic.AddInt32(&t.msgCount, 1)
-	t.lock.Unlock()
 	return nil
 }
 

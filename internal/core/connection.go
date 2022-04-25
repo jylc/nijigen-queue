@@ -6,6 +6,8 @@ import (
 	"github.com/jylc/nijigen-queue/internal/pb"
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,11 +19,8 @@ const (
 	connWaitFin
 	connWaitReq
 	connWaitRdy
+	connWaitResponse
 	connClosed
-)
-
-var (
-	okbytes = []byte("OK")
 )
 
 type ClientError struct {
@@ -34,6 +33,11 @@ func (e ClientError) Error() string {
 
 var (
 	clientErrInvalid = ClientError{"ERR_CLIENT_INVALID"}
+	clientErrSub     = ClientError{"ERR_SUB_CLIENT_INVALID"}
+	clientErrPub     = ClientError{"ERR_PUB_CLIENT_INVALID"}
+	clientErrRdy     = ClientError{"ERR_RDY_CLIENT_INVALID"}
+	clientErrReq     = ClientError{"ERR_REQ_CLIENT_INVALID"}
+	clientErrAck     = ClientError{"ERR_ACK_CLIENT_INVALID"}
 )
 
 // NQConn 为每一个链接创建对应的NQ Client Connection
@@ -49,91 +53,104 @@ type NQConn struct {
 	FrameChan   chan []byte
 	CloseChan   chan bool
 	clientRdy   chan bool
+	heartbeats  int32
+	once        sync.Once
 }
 
-func NewNQConn(nq *NQ, conn gnet.Conn, serialNum int64) *NQConn {
+func NewNQConn(nq *NQ, conn gnet.Conn, id int64) *NQConn {
 	return &NQConn{
-		ID:        serialNum,
-		Conn:      conn,
-		nq:        nq,
-		FrameChan: make(chan []byte, 10),
-		CloseChan: make(chan bool),
-		clientRdy: make(chan bool),
-		state:     connInit,
+		ID:         id,
+		Conn:       conn,
+		nq:         nq,
+		FrameChan:  make(chan []byte, 10),
+		CloseChan:  make(chan bool),
+		clientRdy:  make(chan bool),
+		state:      connInit,
+		ticker:     time.NewTicker(10 * time.Second),
+		heartbeats: 0,
 	}
 }
 
 // Rect 路由转发
-func (c *NQConn) Rect(FrameChan chan []byte, CloseChan chan bool) {
+func (c *NQConn) Rect(frameChan chan []byte, closeChan chan bool) {
 	defer func(c *NQConn) {
-		err := c.CloseConn()
+		err := c.closeConn()
 		if err != nil {
 			logrus.Error(err)
 		}
 	}(c)
-	go c.notifyConsumer()
+
 	for {
 		select {
-		case frame := <-FrameChan:
+		case frame := <-frameChan:
+			var err error
 			request := &pb.RequestProtobuf{}
-			if err := proto.Unmarshal(frame, request); err != nil {
+			if err = proto.Unmarshal(frame, request); err != nil {
 				logrus.Error(err)
 				return
 			}
+			//logrus.Println("NQConn:message bytes ", frame)
+			logrus.Println("NQConn:message ", request)
 			msg := message.NewNQMetaMessage(request)
 
-			switch request.Option {
-			case message.OperationSub:
-				if err := c.CheckState(message.OperationSub); err != nil {
-					logrus.Error(err)
+			switch msg.Option {
+			case message.OptionSub:
+				if c.state != connInit {
+					logrus.Error(clientErrSub)
 					return
 				}
-				topic := c.nq.GetTopic(msg.Topic)
-				c.channel = topic.GetChannel(msg.Channel)
-				c.channelName = msg.Channel
 				c.topicName = msg.Topic
-
-				err := c.AsyncWrite(okbytes)
+				c.channelName = msg.Channel
+				topic := c.nq.GetTopic(c.topicName)
+				c.channel, err = topic.Subscribe(c.channelName, c)
 				if err != nil {
-					return
-				}
-				c.ticker = time.NewTicker(5 * time.Second)
-				c.SetState(message.OperationSub)
-			case message.OperationPub:
-				// 发布消息
-				if err := c.CheckState(message.OperationPub); err != nil {
 					logrus.Error(err)
 					return
 				}
-				if err := c.nq.GetTopic(msg.Topic).Publish(msg); err != nil {
+				c.once.Do(func() {
+					go c.notifyConsumer()
+				})
+				c.state = connWaitRdy
+			case message.OptionPub:
+				if c.state != connInit {
+					logrus.Error(clientErrPub)
+					return
+				}
+				c.topicName = msg.Topic
+				c.channelName = msg.Channel
+				topic := c.nq.GetTopic(c.topicName)
+				if err = topic.Publish(msg); err != nil {
 					logrus.Error(err)
 					return
 				}
-				c.SetState(message.OperationPub)
-			case message.OperationRdy:
-				if err := c.CheckState(message.OperationRdy); err != nil {
+				if err != nil {
 					logrus.Error(err)
+					return
+				}
+				c.state = connInit
+			case message.OptionRdy:
+				if c.state != connWaitRdy {
+					logrus.Error(clientErrRdy)
+					return
+				}
+				atomic.StoreInt32(&c.heartbeats, 0)
+
+				c.state = connWaitResponse
+			case message.OptionReq:
+				if c.state != connWaitResponse {
+					logrus.Error(clientErrReq)
 					return
 				}
 				c.pushMessage()
-				c.SetState(message.OperationRdy)
-			case message.OperationAck:
-				if err := c.CheckState(message.OperationAck); err != nil {
-					logrus.Error(err)
+				c.state = connWaitAck
+			case message.OptionAck:
+				if c.state != connWaitAck {
+					logrus.Error(clientErrAck)
 					return
 				}
-				c.SetState(message.OperationAck)
-			case message.OperationGet:
-			case message.OperationReq:
-			case message.OperationFin:
-				if err := c.CheckState(message.OperationFin); err != nil {
-					logrus.Error(err)
-					return
-				}
-				c.SetState(message.OperationFin)
+				c.state = connWaitRdy
 			}
-		case <-CloseChan:
-			_ = c.CloseConn()
+		case <-closeChan:
 			c.state = connClosed
 			return
 		default:
@@ -141,65 +158,14 @@ func (c *NQConn) Rect(FrameChan chan []byte, CloseChan chan bool) {
 	}
 }
 
-func (c *NQConn) CheckState(cmd string) error {
-	switch cmd {
-	case message.OperationSub:
-		if c.state != connInit {
-			return clientErrInvalid
-		}
-	case message.OperationPub:
-		if c.state != connInit {
-			return clientErrInvalid
-		}
-	case message.OperationGet:
-		if c.state != connWaitGet {
-			return clientErrInvalid
-		}
-	case message.OperationAck:
-		if c.state != connWaitAck {
-			return clientErrInvalid
-		}
-	case message.OperationRdy:
-		if c.state != connWaitRdy {
-			return clientErrInvalid
-		}
-	case message.OperationFin:
-		if c.state != connWaitFin {
-			return clientErrInvalid
-		}
-	case message.OperationReq:
-		if c.state != connWaitReq {
-			return clientErrInvalid
-		}
-	}
-	return nil
+func (c *NQConn) setState(cmd string) {
 }
 
-func (c *NQConn) SetState(cmd string) {
-	switch cmd {
-	case message.OperationSub:
-		c.state = connWaitRdy
-	case message.OperationPub:
-		c.state = connWaitRdy
-	case message.OperationGet:
-		c.state = connWaitAck
-	case message.OperationAck:
-		c.state = connWaitFin
-	case message.OperationRdy:
-		c.state = connWaitAck
-	case message.OperationFin:
-		c.state = connWaitRdy
-	case message.OperationReq:
-		c.state = connWaitPub
-	}
-}
-
-func (c *NQConn) CloseConn() error {
-	logrus.Infof("CLIENT(%s):closing", c.Conn.RemoteAddr())
-	close(c.CloseChan)
-	close(c.FrameChan)
+func (c *NQConn) closeConn() error {
+	logrus.Infof("NQConn:CLIENT(%s):closing", c.Conn.RemoteAddr())
 	if c.channel != nil {
 		c.channel.RemoveSubscriber(c)
+		c.channel = nil
 	}
 	err := c.Close()
 	if err != nil {
@@ -211,23 +177,38 @@ func (c *NQConn) CloseConn() error {
 //notifyConsumer 当有消息进入队列需要发送时先通知消费者，获取消费者的状态，确定是否发送
 func (c *NQConn) notifyConsumer() {
 	for {
+
+		var content string
+		var option string
 		select {
+		case <-c.channel.Notify:
+			logrus.Println("NQConn:notify consumer", c.RemoteAddr())
+			content = "NOTIFY"
+			option = message.OptionNotify
 		case <-c.ticker.C:
-			logrus.Println("NQConn: notify consumer")
-			data, err := message.BuildMessage(&pb.ResponseProtobuf{
-				Topic:   c.topicName,
-				Channel: c.channelName,
-				Content: "QUERY",
-				Option:  "QUERY",
-			})
-			if err != nil {
+			logrus.Println("NQConn:keep alive", c.RemoteAddr())
+			content = "KEEP ALIVE"
+			option = message.OptionAlive
+			atomic.AddInt32(&c.heartbeats, 1)
+			if atomic.LoadInt32(&c.heartbeats) == 3 {
+				close(c.CloseChan)
 				return
 			}
-			err = c.AsyncWrite(data)
-			if err != nil {
-				return
-			}
-		default:
+		}
+		data, err := message.BuildMessage(&pb.ResponseProtobuf{
+			Topic:   c.topicName,
+			Channel: c.channelName,
+			Content: content,
+			Option:  option,
+		})
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		err = c.AsyncWrite(data)
+		if err != nil {
+			logrus.Error(err)
+			return
 		}
 	}
 }

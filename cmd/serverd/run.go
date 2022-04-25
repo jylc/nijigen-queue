@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
+	"github.com/jylc/nijigen-queue/internal/decoder"
 
 	"github.com/panjf2000/gnet"
 	"github.com/sirupsen/logrus"
 
 	"github.com/jylc/nijigen-queue/internal/core"
-
-	"github.com/jylc/nijigen-queue/internal/decoder"
 )
 
 func serve(conf *Config) error {

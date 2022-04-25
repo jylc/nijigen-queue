@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"sync/atomic"
 
 	"github.com/jylc/nijigen-queue/internal/core"
@@ -12,9 +11,9 @@ import (
 
 type Server struct {
 	*gnet.EventServer
-	nq            *core.NQ
-	connSerialNum int64
-	connAliveNum  int64
+	nq           *core.NQ
+	connected    int64
+	disconnected int64
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
@@ -24,70 +23,64 @@ func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
 }
 
 func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
-	onError := func(err error) {
-		logrus.Error(err)
-		out = []byte(err.Error())
-		action = gnet.Close
-	}
-
 	ctx := c.Context()
 	if ctx != nil {
 		if err, ok := ctx.(error); ok {
-			onError(err)
+			s.onError(err)
 			return
 		}
+	} else {
+		return
 	}
 
 	nqConn, ok := ctx.(*core.NQConn)
-	if ok && len(frame) > 0 {
-		logrus.Infof("NQ CONNECT ID:%d", nqConn.ID)
+	if ok {
+		logrus.Infof("server:nqConn:%d recv request", nqConn.ID)
 		nqConn.FrameChan <- frame
 	} else {
 		nqConn.CloseChan <- true
 		close(nqConn.FrameChan)
 		close(nqConn.CloseChan)
-		err := errors.New("cannot get connection nqConn")
-		onError(err)
+		err := errors.New("server:cannot get connection nqConn")
+		out, action = s.onError(err)
 	}
 	c.SetContext(nqConn)
 	return
 }
 
 func (s *Server) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
-	logrus.Infof("nqConn [%s] connected", c.RemoteAddr())
-	atomic.AddInt64(&s.connAliveNum, 1)
-	atomic.AddInt64(&s.connSerialNum, 1)
-	nqConn := core.NewNQConn(s.nq, c, s.connSerialNum)
+	atomic.AddInt64(&s.connected, 1)
+	nqConn := core.NewNQConn(s.nq, c, s.connected)
+	logrus.Infof("server:nqConn:%d [%s] opened", nqConn.ID, nqConn.RemoteAddr())
 	c.SetContext(nqConn)
 	go nqConn.Rect(nqConn.FrameChan, nqConn.CloseChan)
 	return
 }
 
 func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
-	atomic.AddInt64(&s.connAliveNum, -1)
-	if s.connAliveNum == 0 {
-		atomic.StoreInt64(&s.connSerialNum, 0)
-		s.nq.Close()
-	}
+	atomic.AddInt64(&s.disconnected, 1)
 	ctx := c.Context()
 	if ctx != nil {
-		if err, ok := ctx.(error); ok {
-			logrus.Error(err)
+		var ok bool
+		if err, ok = ctx.(error); ok {
+			_, action = s.onError(err)
 			return
 		}
 	}
-	nqConn, ok := c.(*core.NQConn)
-	if !ok {
-		logrus.Error("cannot get nq")
-	}
 
-	if errors.Is(err, io.EOF) {
-		logrus.Infof("client [%s] disconnected", c.RemoteAddr())
-		return
+	nqConn, ok := ctx.(*core.NQConn)
+	if ok {
+		logrus.Infof("server:nqConn:%d [%s] closed", nqConn.ID, nqConn.RemoteAddr())
+		if atomic.LoadInt64(&s.disconnected) == atomic.LoadInt64(&s.connected) {
+			s.nq.Close()
+			action = gnet.Shutdown
+		}
 	}
-	err = nqConn.Close()
-	if err != nil {
-		logrus.Infof("client [%s] disconnected and error occurd on close: %v", c.RemoteAddr(), err)
-	}
+	return
+}
+
+func (s *Server) onError(err error) (out []byte, action gnet.Action) {
+	logrus.Error(err)
+	out = []byte(err.Error())
 	return
 }

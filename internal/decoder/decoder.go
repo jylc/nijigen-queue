@@ -9,7 +9,7 @@ import (
 
 const (
 	lengthByte = 4
-	typeByte   = 1
+	typeByte   = 0
 )
 
 var (
