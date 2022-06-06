@@ -13,11 +13,7 @@ import (
 
 const (
 	connInit = iota
-	connWaitPub
-	connWaitGet
 	connWaitAck
-	connWaitFin
-	connWaitReq
 	connWaitRdy
 	connWaitResponse
 	connClosed
@@ -32,12 +28,10 @@ func (e ClientError) Error() string {
 }
 
 var (
-	clientErrInvalid = ClientError{"ERR_CLIENT_INVALID"}
-	clientErrSub     = ClientError{"ERR_SUB_CLIENT_INVALID"}
-	clientErrPub     = ClientError{"ERR_PUB_CLIENT_INVALID"}
-	clientErrRdy     = ClientError{"ERR_RDY_CLIENT_INVALID"}
-	clientErrReq     = ClientError{"ERR_REQ_CLIENT_INVALID"}
-	clientErrAck     = ClientError{"ERR_ACK_CLIENT_INVALID"}
+	clientErrSub = ClientError{"ERR_SUB_CLIENT_INVALID"}
+	clientErrPub = ClientError{"ERR_PUB_CLIENT_INVALID"}
+	clientErrReq = ClientError{"ERR_REQ_CLIENT_INVALID"}
+	clientErrAck = ClientError{"ERR_ACK_CLIENT_INVALID"}
 )
 
 // NQConn 为每一个链接创建对应的NQ Client Connection
@@ -50,8 +44,8 @@ type NQConn struct {
 	ticker      *time.Ticker
 	topicName   string
 	channelName string
-	FrameChan   chan []byte
-	CloseChan   chan bool
+	frameChan   chan []byte
+	closeChan   chan bool
 	clientRdy   chan bool
 	heartbeats  int32
 	once        sync.Once
@@ -62,8 +56,8 @@ func NewNQConn(nq *NQ, conn gnet.Conn, id int64) *NQConn {
 		ID:         id,
 		Conn:       conn,
 		nq:         nq,
-		FrameChan:  make(chan []byte, 10),
-		CloseChan:  make(chan bool),
+		frameChan:  make(chan []byte, 10),
+		closeChan:  make(chan bool),
 		clientRdy:  make(chan bool),
 		state:      connInit,
 		ticker:     time.NewTicker(10 * time.Second),
@@ -71,25 +65,17 @@ func NewNQConn(nq *NQ, conn gnet.Conn, id int64) *NQConn {
 	}
 }
 
-// Rect 路由转发
-func (c *NQConn) Rect(frameChan chan []byte, closeChan chan bool) {
-	defer func(c *NQConn) {
-		err := c.closeConn()
-		if err != nil {
-			logrus.Error(err)
-		}
-	}(c)
-
+// React 路由转发
+func (c *NQConn) React() {
 	for {
 		select {
-		case frame := <-frameChan:
+		case frame := <-c.frameChan:
 			var err error
 			request := &pb.RequestProtobuf{}
 			if err = proto.Unmarshal(frame, request); err != nil {
 				logrus.Error(err)
-				return
+				close(c.closeChan)
 			}
-			//logrus.Println("NQConn:message bytes ", frame)
 			logrus.Println("NQConn:message ", request)
 			msg := message.NewNQMetaMessage(request)
 
@@ -97,7 +83,7 @@ func (c *NQConn) Rect(frameChan chan []byte, closeChan chan bool) {
 			case message.OptionSub:
 				if c.state != connInit {
 					logrus.Error(clientErrSub)
-					return
+					close(c.closeChan)
 				}
 				c.topicName = msg.Topic
 				c.channelName = msg.Channel
@@ -105,12 +91,12 @@ func (c *NQConn) Rect(frameChan chan []byte, closeChan chan bool) {
 				c.channel, err = topic.Subscribe(c.channelName, c)
 				if err != nil {
 					logrus.Error(err)
-					return
+					close(c.closeChan)
 				}
 				c.once.Do(func() {
 					go c.notifyConsumer()
 				})
-				c.state = connWaitRdy
+				c.state = connWaitResponse
 			case message.OptionPub:
 				if c.state != connInit {
 					logrus.Error(clientErrPub)
@@ -128,29 +114,24 @@ func (c *NQConn) Rect(frameChan chan []byte, closeChan chan bool) {
 					return
 				}
 				c.state = connInit
-			case message.OptionRdy:
-				if c.state != connWaitRdy {
-					logrus.Error(clientErrRdy)
-					return
-				}
-				atomic.StoreInt32(&c.heartbeats, 0)
-
-				c.state = connWaitResponse
 			case message.OptionReq:
 				if c.state != connWaitResponse {
 					logrus.Error(clientErrReq)
-					return
+					close(c.closeChan)
 				}
 				c.pushMessage()
 				c.state = connWaitAck
 			case message.OptionAck:
 				if c.state != connWaitAck {
 					logrus.Error(clientErrAck)
-					return
+					close(c.closeChan)
 				}
 				c.state = connWaitRdy
+			case message.OptionAlive:
+				atomic.StoreInt32(&c.heartbeats, 0)
+				logrus.Println(msg.Content)
 			}
-		case <-closeChan:
+		case <-c.closeChan:
 			c.state = connClosed
 			return
 		default:
@@ -158,26 +139,25 @@ func (c *NQConn) Rect(frameChan chan []byte, closeChan chan bool) {
 	}
 }
 
-func (c *NQConn) setState(cmd string) {
-}
-
-func (c *NQConn) closeConn() error {
+func (c *NQConn) close() error {
 	logrus.Infof("NQConn:CLIENT(%s):closing", c.Conn.RemoteAddr())
+	c.closeChan <- true
 	if c.channel != nil {
 		c.channel.RemoveSubscriber(c)
 		c.channel = nil
 	}
-	err := c.Close()
-	if err != nil {
-		return err
-	}
 	return nil
+}
+func (c *NQConn) Release() {
+	err := c.close()
+	if err != nil {
+		return
+	}
 }
 
 //notifyConsumer 当有消息进入队列需要发送时先通知消费者，获取消费者的状态，确定是否发送
 func (c *NQConn) notifyConsumer() {
 	for {
-
 		var content string
 		var option string
 		select {
@@ -191,7 +171,10 @@ func (c *NQConn) notifyConsumer() {
 			option = message.OptionAlive
 			atomic.AddInt32(&c.heartbeats, 1)
 			if atomic.LoadInt32(&c.heartbeats) == 3 {
-				close(c.CloseChan)
+				err := c.close()
+				if err != nil {
+					return
+				}
 				return
 			}
 		}
@@ -218,4 +201,8 @@ func (c *NQConn) pushMessage() {
 	if err := c.AsyncWrite(msg); err != nil {
 		logrus.Error(err)
 	}
+}
+
+func (c *NQConn) Handle(frame []byte) {
+	c.frameChan <- frame
 }

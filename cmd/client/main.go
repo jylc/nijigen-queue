@@ -16,22 +16,24 @@ import (
 func main() {
 	var outerWG sync.WaitGroup
 	conns := make([]net.Conn, 0)
+	topic := fmt.Sprintf("topic-%d", rand.Intn(100))
+	channel := fmt.Sprintf("channel-%d", rand.Intn(100))
 	for i := 0; i < 2; i++ {
 		conns = append(conns, newConn())
 	}
 	go func() {
 		outerWG.Add(1)
 		defer outerWG.Done()
-		sub(conns[0])
+		sub(conns[0], topic, channel)
 	}()
 
 	go func() {
 		outerWG.Add(1)
 		defer outerWG.Done()
-		pub(conns[1], 10)
+		pub(conns[0], 10, topic, channel)
 	}()
+
 	outerWG.Wait()
-	time.Sleep(50 * time.Second)
 }
 
 func newConn() net.Conn {
@@ -56,10 +58,9 @@ func newConn() net.Conn {
 	return conn
 }
 
-func sub(conn net.Conn) {
+func sub(conn net.Conn, topic, channel string) {
 	ip := conn.LocalAddr().String()
-	topic := fmt.Sprintf("topic-%d", rand.Intn(100))
-	channel := fmt.Sprintf("channel-%d", rand.Intn(100))
+
 	data, err := message.BuildMessage(&pb.RequestProtobuf{
 		Option:  message.OptionSub,
 		Topic:   topic,
@@ -99,25 +100,12 @@ func sub(conn net.Conn) {
 		logrus.Printf("Subscriber[%s] recv response from server:%v", ip, request)
 		switch response.Option {
 		case message.OptionNotify:
+			//返回状态，准备接收消息
 			logrus.Infof("Subscriber[%s] get notify", ip)
 			data, err = message.BuildMessage(&pb.RequestProtobuf{
 				Topic:   topic,
 				Channel: channel,
-				Content: "ready to accept the message",
-				Option:  message.OptionRdy,
-				Timeout: 0,
-			})
-			if err != nil {
-				logrus.Error(err)
-			}
-			_, err = conn.Write(data)
-			if err != nil {
-				panic(err)
-			}
-			data, err = message.BuildMessage(&pb.RequestProtobuf{
-				Topic:   topic,
-				Channel: channel,
-				Content: "request",
+				Content: "accept the message",
 				Option:  message.OptionReq,
 				Timeout: 0,
 			})
@@ -133,8 +121,8 @@ func sub(conn net.Conn) {
 			data, err = message.BuildMessage(&pb.RequestProtobuf{
 				Topic:   topic,
 				Channel: channel,
-				Content: "ready to accept the message",
-				Option:  message.OptionRdy,
+				Content: fmt.Sprintf("Subscriber[%s] keep alive", ip),
+				Option:  message.OptionAlive,
 				Timeout: 0,
 			})
 			if err != nil {
@@ -150,13 +138,13 @@ func sub(conn net.Conn) {
 	}
 }
 
-func pub(conn net.Conn, times int) {
+func pub(conn net.Conn, times int, topic, channel string) {
 	ip := conn.LocalAddr().String()
 	for i := 0; i < times; i++ {
 		data, err := message.BuildMessage(&pb.RequestProtobuf{
 			Option:  message.OptionPub,
-			Topic:   fmt.Sprintf("topic-%d", rand.Intn(100)),
-			Channel: fmt.Sprintf("channel-%d", rand.Intn(100)),
+			Topic:   topic,
+			Channel: channel,
 			Content: "test content",
 		})
 		if err != nil {

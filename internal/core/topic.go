@@ -33,13 +33,14 @@ func GetTopic(topicName string, nq *NQ) {
 
 func NewTopic(topic string, nq *NQ) *Topic {
 	t := &Topic{
-		name:     topic,
-		chmap:    make(map[string]*Channel),
-		msgChan:  make(chan *message.MetaMessage, nq.GetOpts().MaxMessageNum),
-		nq:       nq,
-		msgCount: 0,
+		name:      topic,
+		chmap:     make(map[string]*Channel),
+		msgChan:   make(chan *message.MetaMessage, nq.GetOpts().MaxMessageNum),
+		closeChan: make(chan bool),
+		nq:        nq,
+		msgCount:  0,
 	}
-	t.waitGroup.Wait(t.messagePump)
+	t.waitGroup.Warp(t.messagePump)
 	return t
 }
 
@@ -110,6 +111,8 @@ func (t *Topic) Publish(msg *message.MetaMessage) error {
 }
 
 func (t *Topic) Close() error {
+	close(t.closeChan)
+	t.waitGroup.Wait()
 	for _, channel := range t.chmap {
 		if err := channel.Close(); err != nil {
 			logrus.Error(err)

@@ -16,7 +16,6 @@ const (
 const (
 	OptionSub string = "SUB"
 	OptionPub string = "PUB"
-	OptionRdy string = "Rdy"
 	OptionAck string = "Ack"
 	OptionReq string = "Req"
 

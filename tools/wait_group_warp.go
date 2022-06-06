@@ -8,7 +8,7 @@ type WaitGroupWrapper struct {
 	sync.WaitGroup
 }
 
-func (w *WaitGroupWrapper) Wait(cb func()) {
+func (w *WaitGroupWrapper) Warp(cb func()) {
 	w.Add(1)
 	go func() {
 		cb()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"github.com/jylc/nijigen-queue/tools"
 	"sync/atomic"
 
 	"github.com/jylc/nijigen-queue/internal/core"
@@ -14,6 +15,7 @@ type Server struct {
 	nq           *core.NQ
 	connected    int64
 	disconnected int64
+	waitGroup    tools.WaitGroupWrapper
 }
 
 func (s *Server) OnInitComplete(srv gnet.Server) (action gnet.Action) {
@@ -36,11 +38,8 @@ func (s *Server) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Actio
 	nqConn, ok := ctx.(*core.NQConn)
 	if ok {
 		logrus.Infof("server:nqConn:%d recv request", nqConn.ID)
-		nqConn.FrameChan <- frame
+		nqConn.Handle(frame)
 	} else {
-		nqConn.CloseChan <- true
-		close(nqConn.FrameChan)
-		close(nqConn.CloseChan)
 		err := errors.New("server:cannot get connection nqConn")
 		out, action = s.onError(err)
 	}
@@ -53,7 +52,7 @@ func (s *Server) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 	nqConn := core.NewNQConn(s.nq, c, s.connected)
 	logrus.Infof("server:nqConn:%d [%s] opened", nqConn.ID, nqConn.RemoteAddr())
 	c.SetContext(nqConn)
-	go nqConn.Rect(nqConn.FrameChan, nqConn.CloseChan)
+	go nqConn.React()
 	return
 }
 
@@ -70,11 +69,8 @@ func (s *Server) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 
 	nqConn, ok := ctx.(*core.NQConn)
 	if ok {
+		nqConn.Release()
 		logrus.Infof("server:nqConn:%d [%s] closed", nqConn.ID, nqConn.RemoteAddr())
-		if atomic.LoadInt64(&s.disconnected) == atomic.LoadInt64(&s.connected) {
-			s.nq.Close()
-			action = gnet.Shutdown
-		}
 	}
 	return
 }

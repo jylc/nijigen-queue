@@ -3,6 +3,7 @@ package queue
 import (
 	"container/list"
 	"fmt"
+	"github.com/jylc/nijigen-queue/tools"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type TimeWheel struct {
 	itemChan  chan interface{}
 	sendChan  chan interface{}
 	stopChan  chan interface{}
+	waitGroup tools.WaitGroupWrapper
 	lock      sync.RWMutex
 }
 
@@ -37,7 +39,7 @@ func NewNQTimeWheel(interval time.Duration, slotNum int, capacity int, sendChan 
 		sendChan:  sendChan,
 	}
 	t.initSlots()
-	go t.run()
+	t.waitGroup.Warp(t.run)
 	return t, nil
 }
 
@@ -116,4 +118,5 @@ func (t *TimeWheel) initSlots() {
 
 func (t *TimeWheel) Stop() {
 	close(t.stopChan)
+	t.waitGroup.Wait()
 }

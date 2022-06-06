@@ -104,7 +104,7 @@ func NewChannel(channel string, nq *NQ) *Channel {
 		_ = fmt.Errorf("create channel %s failed", channel)
 		return nil
 	}
-	go ch.messagePump()
+	ch.waitGroup.Warp(ch.messagePump)
 	return ch
 }
 
@@ -133,10 +133,6 @@ func (c *Channel) messagePump() {
 func (c *Channel) Publish(msg *message.MetaMessage) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	/*if msg.Latency != 0 {
-		c.tw.Set(msg.Latency, msg)
-		return nil
-	}*/
 	c.msgChan <- msg
 	return nil
 }
@@ -179,7 +175,6 @@ func (c *Channel) sendMsg(conn gnet.Conn, content string) error {
 
 func (c *Channel) GetMsg() []byte {
 	var msg []byte
-
 	for {
 		select {
 		case msg = <-c.resMsgChan:
@@ -190,7 +185,8 @@ func (c *Channel) GetMsg() []byte {
 }
 
 func (c *Channel) Close() error {
-	c.tw.Stop()
 	close(c.closeChan)
+	c.waitGroup.Wait()
+	c.tw.Stop()
 	return nil
 }
